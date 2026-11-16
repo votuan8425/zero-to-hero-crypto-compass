@@ -14,7 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          currency: string
+          display_name: string | null
+          id: string
+          local_migrated_at: string | null
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          display_name?: string | null
+          id: string
+          local_migrated_at?: string | null
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          display_name?: string | null
+          id?: string
+          local_migrated_at?: string | null
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reference_portfolios: {
+        Row: {
+          ai_summary: string | null
+          created_at: string
+          description: string | null
+          holdings: Json
+          id: string
+          image_paths: string[]
+          name: string
+          notes: string | null
+          total_value: number | null
+          total_value_currency: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          created_at?: string
+          description?: string | null
+          holdings?: Json
+          id?: string
+          image_paths?: string[]
+          name: string
+          notes?: string | null
+          total_value?: number | null
+          total_value_currency?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          ai_summary?: string | null
+          created_at?: string
+          description?: string | null
+          holdings?: Json
+          id?: string
+          image_paths?: string[]
+          name?: string
+          notes?: string | null
+          total_value?: number | null
+          total_value_currency?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          coin_name: string
+          created_at: string
+          fee_usd: number
+          id: string
+          import_key: string | null
+          note: string | null
+          price_usd: number
+          quantity: number
+          symbol: string
+          tx_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          coin_name: string
+          created_at?: string
+          fee_usd?: number
+          id?: string
+          import_key?: string | null
+          note?: string | null
+          price_usd: number
+          quantity: number
+          symbol: string
+          tx_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          coin_name?: string
+          created_at?: string
+          fee_usd?: number
+          id?: string
+          import_key?: string | null
+          note?: string | null
+          price_usd?: number
+          quantity?: number
+          symbol?: string
+          tx_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
