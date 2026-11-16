@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedCaNhanRouteImport } from './routes/_authenticated/ca-nhan'
 import { Route as AuthenticatedTichSanRouteImport } from './routes/_authenticated/tich-san'
 import { Route as AuthenticatedTrangChuRouteImport } from './routes/_authenticated/trang-chu'
 
@@ -35,6 +36,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCaNhanRoute = AuthenticatedCaNhanRouteImport.update({
+  id: '/ca-nhan',
+  path: '/ca-nhan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTichSanRoute = AuthenticatedTichSanRouteImport.update({
   id: '/tich-san',
   path: '/tich-san',
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
 }
@@ -57,6 +64,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
 }
@@ -66,20 +74,24 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/_authenticated/tich-san': typeof AuthenticatedTichSanRoute
   '/_authenticated/trang-chu': typeof AuthenticatedTrangChuRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/reset-password' | '/tich-san' | '/trang-chu'
+  fullPaths:
+    '/' | '/auth' | '/reset-password' | '/ca-nhan' | '/tich-san' | '/trang-chu'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/reset-password' | '/tich-san' | '/trang-chu'
+  to:
+    '/' | '/auth' | '/reset-password' | '/ca-nhan' | '/tich-san' | '/trang-chu'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/ca-nhan'
     | '/_authenticated/tich-san'
     | '/_authenticated/trang-chu'
   fileRoutesById: FileRoutesById
@@ -121,6 +133,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/ca-nhan': {
+      id: '/_authenticated/ca-nhan'
+      path: '/ca-nhan'
+      fullPath: '/ca-nhan'
+      preLoaderRoute: typeof AuthenticatedCaNhanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tich-san': {
       id: '/_authenticated/tich-san'
       path: '/tich-san'
@@ -139,11 +158,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCaNhanRoute: typeof AuthenticatedCaNhanRoute
   AuthenticatedTichSanRoute: typeof AuthenticatedTichSanRoute
   AuthenticatedTrangChuRoute: typeof AuthenticatedTrangChuRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCaNhanRoute: AuthenticatedCaNhanRoute,
   AuthenticatedTichSanRoute: AuthenticatedTichSanRoute,
   AuthenticatedTrangChuRoute: AuthenticatedTrangChuRoute,
 }

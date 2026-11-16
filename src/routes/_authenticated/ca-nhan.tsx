@@ -135,8 +135,15 @@ function PersonalPage() {
       </div>
     </div>
   );
+}
 
   function BackupSection() {
+    const user = useUser();
+    const qc = useQueryClient();
+    const { data: profile } = useProfile();
+    const txs = useTransactions();
+    const refs = useReferences();
+    const sync = useSync();
     const fileRef = useRef<HTMLInputElement>(null);
     const [busy, setBusy] = useState(false);
     async function onRestore(file: File) {
@@ -168,6 +175,12 @@ function PersonalPage() {
   }
 
   function LegacyMigration() {
+    const user = useUser();
+    const qc = useQueryClient();
+    const { data: profile } = useProfile();
+    const txs = useTransactions();
+    const refs = useReferences();
+    const sync = useSync();
     const scan = useQuery({ queryKey: ["legacy-scan"], queryFn: scanLegacyData, staleTime: Infinity });
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<{ expected: number; found: number } | null>(null);
@@ -219,7 +232,6 @@ function PersonalPage() {
       </Section>
     );
   }
-}
 
 function PasswordSection({ email }: { email: string }) {
   const [current, setCurrent] = useState("");
