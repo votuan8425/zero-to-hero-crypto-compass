@@ -1,7 +1,7 @@
 import { normalizeSymbol, OTHER_SYMBOL } from "./coins";
 
 /** Where a number came from: read off the image, calculated by AI from other visible numbers, or not found. */
-export type DataSource = "extracted" | "computed" | "unknown";
+export type DataSource = "extracted" | "computed" | "unknown" | "edited";
 
 export interface RefHolding {
   symbol: string;
@@ -104,4 +104,5 @@ export const SOURCE_LABEL: Record<DataSource, string> = {
   extracted: "Trích xuất từ ảnh",
   computed: "AI ước tính",
   unknown: "Không xác định",
+  edited: "Bạn đã chỉnh sửa",
 };
