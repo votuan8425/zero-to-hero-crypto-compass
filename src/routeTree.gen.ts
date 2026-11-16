@@ -16,6 +16,8 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedCaNhanRouteImport } from './routes/_authenticated/ca-nhan'
 import { Route as AuthenticatedTichSanRouteImport } from './routes/_authenticated/tich-san'
 import { Route as AuthenticatedTrangChuRouteImport } from './routes/_authenticated/trang-chu'
+import { Route as AuthenticatedThamKhaoIndexRouteImport } from './routes/_authenticated/tham-khao.index'
+import { Route as AuthenticatedThamKhaoMoiRouteImport } from './routes/_authenticated/tham-khao.moi'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -51,6 +53,18 @@ const AuthenticatedTrangChuRoute = AuthenticatedTrangChuRouteImport.update({
   path: '/trang-chu',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedThamKhaoIndexRoute =
+  AuthenticatedThamKhaoIndexRouteImport.update({
+    id: '/tham-khao/',
+    path: '/tham-khao/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedThamKhaoMoiRoute =
+  AuthenticatedThamKhaoMoiRouteImport.update({
+    id: '/tham-khao/moi',
+    path: '/tham-khao/moi',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -59,6 +73,8 @@ export interface FileRoutesByFullPath {
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,6 +83,8 @@ export interface FileRoutesByTo {
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/tham-khao': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,14 +95,30 @@ export interface FileRoutesById {
   '/_authenticated/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/_authenticated/tich-san': typeof AuthenticatedTichSanRoute
   '/_authenticated/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/_authenticated/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/_authenticated/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/reset-password' | '/ca-nhan' | '/tich-san' | '/trang-chu'
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/ca-nhan'
+    | '/tich-san'
+    | '/trang-chu'
+    | '/tham-khao/moi'
+    | '/tham-khao/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/auth' | '/reset-password' | '/ca-nhan' | '/tich-san' | '/trang-chu'
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/ca-nhan'
+    | '/tich-san'
+    | '/trang-chu'
+    | '/tham-khao/moi'
+    | '/tham-khao'
   id:
     | '__root__'
     | '/'
@@ -94,6 +128,8 @@ export interface FileRouteTypes {
     | '/_authenticated/ca-nhan'
     | '/_authenticated/tich-san'
     | '/_authenticated/trang-chu'
+    | '/_authenticated/tham-khao/moi'
+    | '/_authenticated/tham-khao/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -154,6 +190,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTrangChuRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tham-khao/': {
+      id: '/_authenticated/tham-khao/'
+      path: '/tham-khao'
+      fullPath: '/tham-khao/'
+      preLoaderRoute: typeof AuthenticatedThamKhaoIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tham-khao/moi': {
+      id: '/_authenticated/tham-khao/moi'
+      path: '/tham-khao/moi'
+      fullPath: '/tham-khao/moi'
+      preLoaderRoute: typeof AuthenticatedThamKhaoMoiRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -161,12 +211,16 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaNhanRoute: typeof AuthenticatedCaNhanRoute
   AuthenticatedTichSanRoute: typeof AuthenticatedTichSanRoute
   AuthenticatedTrangChuRoute: typeof AuthenticatedTrangChuRoute
+  AuthenticatedThamKhaoMoiRoute: typeof AuthenticatedThamKhaoMoiRoute
+  AuthenticatedThamKhaoIndexRoute: typeof AuthenticatedThamKhaoIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaNhanRoute: AuthenticatedCaNhanRoute,
   AuthenticatedTichSanRoute: AuthenticatedTichSanRoute,
   AuthenticatedTrangChuRoute: AuthenticatedTrangChuRoute,
+  AuthenticatedThamKhaoMoiRoute: AuthenticatedThamKhaoMoiRoute,
+  AuthenticatedThamKhaoIndexRoute: AuthenticatedThamKhaoIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
