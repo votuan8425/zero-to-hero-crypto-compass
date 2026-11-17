@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -12,7 +12,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CoinLogo } from "./coin-logo";
 import { PnlText } from "./stat";
 import { getCoin } from "@/lib/coins";
-import { getCandles, type CandlePoint, type ChartRange } from "@/lib/prices.functions";
+import {
+  CHART_VISIBLE_COUNT,
+  getCandles,
+  type CandlePoint,
+  type ChartRange,
+} from "@/lib/prices.functions";
 import { formatNumber, type Currency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -27,10 +32,32 @@ export function candleIsUp(p: CandlePoint): boolean {
   return p.c >= p.o;
 }
 
+/** Kẹp độ lùi khi kéo chart trong [0, số nến thừa ngoài cửa sổ hiển thị]. */
+export function clampPan(panOffset: number, total: number, visible: number): number {
+  return Math.min(Math.max(0, panOffset), Math.max(0, total - visible));
+}
+
+/** Nhãn thời gian dưới trục chart theo khung: 1D→giờ, 1M→ngày/tháng, 1Y→tháng/năm. */
+export function formatChartTime(t: number, range: ChartRange): string {
+  const d = new Date(t);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  if (range === "1D") {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${min}`;
+  }
+  if (range === "1M") return `${dd}/${mm}`;
+  return `${mm}/${String(d.getFullYear()).slice(2)}`;
+}
+
 const W = 560;
-const H = 200;
+const H = 224;
 const PAD = 10;
 const LABEL_W = 84; // Gutter phải cho mốc giá.
+const TIME_LABEL_H = 22; // Dải dưới cho nhãn thời gian.
+const PLOT_BOTTOM = H - PAD - TIME_LABEL_H;
+const PLOT_H = PLOT_BOTTOM - PAD;
 
 /** Segmented control (viên thuốc) cho 2 cụm nút chuyển khoảng và kiểu chart:
  *  khung bo tròn chứa các nút, nút đang chọn nổi lên bằng màu chủ đạo. */
@@ -58,7 +85,14 @@ export function PriceChartDialog({
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
   const [chartType, setChartType] = useState<"line" | "candles">("candles");
+  // Kéo thả (pan): panOffset = số nến đã lùi khỏi cửa sổ mới nhất; dragPx =
+  // độ lệch pixel lúc đang kéo (chưa thả thì chưa chốt cửa sổ).
+  const [panOffset, setPanOffset] = useState(0);
+  const [dragPx, setDragPx] = useState(0);
+  const dragRef = useRef<{ startX: number; startPan: number } | null>(null);
   const gradientId = useId();
+  const clipPlotId = useId();
+  const clipTimeId = useId();
   const coin = symbol ? getCoin(symbol) : undefined;
   const candles = useQuery({
     queryKey: ["candles", symbol, range],
@@ -67,11 +101,22 @@ export function PriceChartDialog({
     staleTime: 60_000,
   });
   const points = candles.data?.points ?? [];
+  const VISIBLE = CHART_VISIBLE_COUNT[range];
+  const maxPan = Math.max(0, points.length - VISIBLE);
+  const clampedPan = clampPan(panOffset, points.length, VISIBLE);
+  const startIndex = Math.max(0, points.length - VISIBLE - clampedPan);
+  const visiblePoints = points.slice(startIndex, startIndex + VISIBLE);
+  // Đổi khung thời gian / coin thì về lại cửa sổ mới nhất.
+  useEffect(() => {
+    setPanOffset(0);
+    setDragPx(0);
+    dragRef.current = null;
+  }, [range, symbol]);
   const chart = useMemo(() => {
-    if (points.length < 2) return null;
+    if (visiblePoints.length < 2) return null;
     // Miền giá theo cao/thấp thật của nến (bao cả giá đóng).
-    let rawMin = Math.min(...points.map((p) => p.l));
-    let rawMax = Math.max(...points.map((p) => p.h));
+    let rawMin = Math.min(...visiblePoints.map((p) => p.l));
+    let rawMax = Math.max(...visiblePoints.map((p) => p.h));
     if (rawMax === rawMin) {
       rawMin = rawMax * 0.999;
       rawMax = rawMax * 1.001;
@@ -79,12 +124,15 @@ export function PriceChartDialog({
     const pad = (rawMax - rawMin) * 0.08;
     const min = rawMin - pad;
     const max = rawMax + pad;
+    const plotW = W - PAD * 2 - LABEL_W;
     const x = (i: number) =>
-      PAD + (i / (points.length - 1)) * (W - PAD * 2 - LABEL_W);
-    const y = (v: number) => PAD + (1 - (v - min) / (max - min)) * (H - PAD * 2);
-    const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
-    const area = `${line} L${x(points.length - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
-    const last = points[points.length - 1];
+      PAD + (i / Math.max(1, visiblePoints.length - 1)) * plotW;
+    const y = (v: number) => PAD + (1 - (v - min) / (max - min)) * PLOT_H;
+    const line = visiblePoints
+      .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.c).toFixed(1)}`)
+      .join(" ");
+    const area = `${line} L${x(visiblePoints.length - 1).toFixed(1)},${PLOT_BOTTOM} L${x(0).toFixed(1)},${PLOT_BOTTOM} Z`;
+    const last = visiblePoints[visiblePoints.length - 1];
     // Mốc giá theo dữ liệu thật (cao nhất → thấp nhất), hiển thị ở trục phải.
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
       const value = rawMax - f * (rawMax - rawMin);
@@ -92,9 +140,8 @@ export function PriceChartDialog({
     });
     // Nến: râu (cao→thấp) + thân (mở→đóng); xanh khi đóng >= mở, đỏ khi giảm.
     // Nến doji (mở = đóng) thì thân cao 1px thành một gạch ngang.
-    const plotW = W - PAD * 2 - LABEL_W;
-    const bw = Math.max(2, (plotW / points.length) * 0.62);
-    const candleBars = points.map((p, i) => {
+    const bw = Math.max(2, (plotW / visiblePoints.length) * 0.62);
+    const candleBars = visiblePoints.map((p, i) => {
       const cx = x(i);
       const top = y(Math.max(p.o, p.c));
       const bottom = y(Math.min(p.o, p.c));
@@ -109,21 +156,71 @@ export function PriceChartDialog({
         up: candleIsUp(p),
       };
     });
+    // Nhãn thời gian dưới trục: 5 mốc cách đều trong cửa sổ, kẹp cho khỏi tràn.
+    const labelIdx = [0, 1, 2, 3, 4].map((k) =>
+      Math.round((k * (visiblePoints.length - 1)) / 4),
+    );
+    const timeLabels = [...new Set(labelIdx)]
+      .map((i) => {
+        const p = visiblePoints[i];
+        if (!p) return null;
+        const lx = Math.min(Math.max(x(i), PAD + 16), PAD + plotW);
+        return { x: lx, label: formatChartTime(p.t, range) };
+      })
+      .filter((t): t is { x: number; label: string } => t !== null);
+    // Mốc giá cuối (giá đóng nến cuối cửa sổ) trên trục phải; ẩn mốc lưới
+    // nào quá gần nó để khỏi đè chữ.
+    const lastY = last ? y(last.c) : 0;
+    const ticksShown = ticks.filter((t) => Math.abs(t.y - lastY) > 9);
     return {
       line,
       area,
-      lastX: last ? x(points.length - 1) : 0,
-      lastY: last ? y(last.c) : 0,
-      ticks,
+      lastX: last ? x(visiblePoints.length - 1) : 0,
+      lastY,
+      ticks: ticksShown,
       candleBars,
+      timeLabels,
+      lastClose: last?.c ?? null,
+      stepPx: plotW / Math.max(1, visiblePoints.length - 1),
     };
-  }, [points]);
-  const change = candles.data?.changePct ?? null;
+  }, [visiblePoints, range]);
+  // Số liệu theo cửa sổ đang xem (đổi khi kéo thả), không theo toàn bộ dữ liệu nạp.
+  const lastVisible =
+    visiblePoints.length > 0 ? visiblePoints[visiblePoints.length - 1] : undefined;
+  const firstVisible = visiblePoints[0];
+  const lastPrice = lastVisible?.c ?? null;
+  const high = visiblePoints.length > 0 ? Math.max(...visiblePoints.map((p) => p.h)) : null;
+  const low = visiblePoints.length > 0 ? Math.min(...visiblePoints.map((p) => p.l)) : null;
+  const change =
+    firstVisible && lastVisible && firstVisible.c > 0
+      ? ((lastVisible.c - firstVisible.c) / firstVisible.c) * 100
+      : null;
   const up = (change ?? 0) >= 0;
-  const lastPrice = points.length > 0 ? (points[points.length - 1]?.c ?? null) : null;
-  const high = points.length > 0 ? Math.max(...points.map((p) => p.h)) : null;
-  const low = points.length > 0 ? Math.min(...points.map((p) => p.l)) : null;
   const unit = coin?.unit === "ounce" ? " / ounce" : "";
+  const canPan = points.length > VISIBLE;
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!canPan || !chart) return;
+    dragRef.current = { startX: e.clientX, startPan: clampedPan };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    setDragPx(e.clientX - dragRef.current.startX);
+  }
+  function endPan(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current || !chart) return;
+    const deltaPx = e.clientX - dragRef.current.startX;
+    const steps = Math.round(deltaPx / chart.stepPx);
+    // Kéo sang phải → xem nến cũ hơn (tăng độ lùi); kéo sang trái → về nến mới.
+    setPanOffset(clampPan(dragRef.current.startPan + steps, points.length, VISIBLE));
+    setDragPx(0);
+    dragRef.current = null;
+  }
+  function cancelPan() {
+    setDragPx(0);
+    dragRef.current = null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -193,21 +290,28 @@ export function PriceChartDialog({
           </ToggleGroup>
         </div>
 
-        <div className="relative">
+        <div
+          className="relative touch-none select-none"
+          style={{ cursor: canPan ? "grab" : "default" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endPan}
+          onPointerCancel={cancelPan}
+        >
           {candles.isLoading ? (
-            <div className="grid h-[200px] place-items-center text-sm text-muted-foreground">
+            <div className="grid h-[224px] place-items-center text-sm text-muted-foreground">
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Đang tải biểu đồ…
               </span>
             </div>
           ) : candles.data?.error || !chart ? (
-            <div className="grid h-[200px] place-items-center px-6 text-center text-sm text-muted-foreground">
+            <div className="grid h-[224px] place-items-center px-6 text-center text-sm text-muted-foreground">
               {candles.data?.error ?? "Chưa có dữ liệu biểu đồ cho coin này."}
             </div>
           ) : (
             <svg
               viewBox={`0 0 ${W} ${H}`}
-              className="h-[200px] w-full"
+              className="h-[224px] w-full"
               role="img"
               aria-label={`Biểu đồ giá ${coin?.name ?? symbol}`}
             >
@@ -216,6 +320,12 @@ export function PriceChartDialog({
                   <stop offset="0%" stopColor={up ? "var(--gain)" : "var(--loss)"} stopOpacity="0.35" />
                   <stop offset="100%" stopColor={up ? "var(--gain)" : "var(--loss)"} stopOpacity="0" />
                 </linearGradient>
+                <clipPath id={clipPlotId}>
+                  <rect x={PAD} y={PAD} width={W - PAD * 2 - LABEL_W} height={PLOT_H} />
+                </clipPath>
+                <clipPath id={clipTimeId}>
+                  <rect x={PAD} y={PLOT_BOTTOM} width={W - PAD * 2 - LABEL_W} height={TIME_LABEL_H} />
+                </clipPath>
               </defs>
               {chart.ticks.map((t) => (
                 <g key={t.value}>
@@ -239,45 +349,78 @@ export function PriceChartDialog({
                   </text>
                 </g>
               ))}
-              {chartType === "candles" ? (
-                chart.candleBars.map((c, i) => (
-                  <g key={i}>
-                    <line
-                      x1={c.cx.toFixed(1)}
-                      x2={c.cx.toFixed(1)}
-                      y1={c.wickY1.toFixed(1)}
-                      y2={c.wickY2.toFixed(1)}
-                      stroke={c.up ? "var(--gain)" : "var(--loss)"}
-                      strokeWidth="1.5"
-                    />
-                    <rect
-                      x={c.bodyX.toFixed(1)}
-                      y={c.bodyY.toFixed(1)}
-                      width={c.bodyW.toFixed(1)}
-                      height={c.bodyH.toFixed(1)}
-                      rx="1"
-                      fill={c.up ? "var(--gain)" : "var(--loss)"}
-                    />
-                  </g>
-                ))
-              ) : (
-                <>
-                  <path d={chart.area} fill={`url(#${gradientId})`} />
-                  <path
-                    d={chart.line}
-                    fill="none"
-                    stroke={up ? "var(--gain)" : "var(--loss)"}
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  <circle cx={chart.lastX} cy={chart.lastY} r="4" fill={up ? "var(--gain)" : "var(--loss)"} />
-                  <circle cx={chart.lastX} cy={chart.lastY} r="8" fill={up ? "var(--gain)" : "var(--loss)"} opacity="0.25" />
-                </>
+              {chart.lastClose != null && (
+                <text
+                  x={W - 6}
+                  y={chart.lastY + 4}
+                  textAnchor="end"
+                  fontSize="11"
+                  fontWeight="700"
+                  fill={up ? "var(--gain)" : "var(--loss)"}
+                >
+                  {money(chart.lastClose, currency !== "USDT")}
+                </text>
               )}
+              <g clipPath={`url(#${clipPlotId})`} transform={`translate(${dragPx}, 0)`}>
+                {chartType === "candles" ? (
+                  chart.candleBars.map((c, i) => (
+                    <g key={i}>
+                      <line
+                        x1={c.cx.toFixed(1)}
+                        x2={c.cx.toFixed(1)}
+                        y1={c.wickY1.toFixed(1)}
+                        y2={c.wickY2.toFixed(1)}
+                        stroke={c.up ? "var(--gain)" : "var(--loss)"}
+                        strokeWidth="1.5"
+                      />
+                      <rect
+                        x={c.bodyX.toFixed(1)}
+                        y={c.bodyY.toFixed(1)}
+                        width={c.bodyW.toFixed(1)}
+                        height={c.bodyH.toFixed(1)}
+                        rx="1"
+                        fill={c.up ? "var(--gain)" : "var(--loss)"}
+                      />
+                    </g>
+                  ))
+                ) : (
+                  <>
+                    <path d={chart.area} fill={`url(#${gradientId})`} />
+                    <path
+                      d={chart.line}
+                      fill="none"
+                      stroke={up ? "var(--gain)" : "var(--loss)"}
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    <circle cx={chart.lastX} cy={chart.lastY} r="4" fill={up ? "var(--gain)" : "var(--loss)"} />
+                    <circle cx={chart.lastX} cy={chart.lastY} r="8" fill={up ? "var(--gain)" : "var(--loss)"} opacity="0.25" />
+                  </>
+                )}
+              </g>
+              <g clipPath={`url(#${clipTimeId})`} transform={`translate(${dragPx}, 0)`}>
+                {chart.timeLabels.map((t, i) => (
+                  <text
+                    key={i}
+                    x={t.x}
+                    y={PLOT_BOTTOM + 16}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fill="var(--muted-foreground)"
+                  >
+                    {t.label}
+                  </text>
+                ))}
+              </g>
             </svg>
           )}
         </div>
+        {canPan && (
+          <p className="mt-1 text-center text-[11px] text-muted-foreground">
+            Kéo sang phải để xem nến cũ hơn, kéo sang trái để về nến mới nhất.
+          </p>
+        )}
 
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-surface-raised px-2 py-2.5">

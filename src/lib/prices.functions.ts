@@ -168,6 +168,13 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
 
 export type ChartRange = "1D" | "1M" | "1Y";
 
+/** Số nến hiển thị trong một cửa sổ chart (kéo thả để xem nến cũ hơn). */
+export const CHART_VISIBLE_COUNT: Record<ChartRange, number> = {
+  "1D": 24,
+  "1M": 30,
+  "1Y": 52,
+};
+
 export interface CandlePoint {
   /** Epoch ms. */
   t: number;
@@ -218,13 +225,14 @@ export function bucketPricesToCandles(
   return [...buckets.values()].sort((a, b) => a.t - b.t);
 }
 
-/** OKX candlesticks (public, no key). Rows are newest-first: [ts, o, h, l, c, ...]. */
+/** OKX candlesticks (public, no key). Rows are newest-first: [ts, o, h, l, c, ...].
+ *  Nạp gấp 3 lần số nến hiển thị để kéo thả (pan) xem được nến cũ hơn. */
 async function okxCandles(
   symbol: string,
   range: ChartRange,
 ): Promise<CandlePoint[] | null> {
-  const [bar, limit] =
-    range === "1D" ? ["1H", 24] : range === "1M" ? ["1D", 30] : ["1W", 52];
+  const bar = range === "1D" ? "1H" : range === "1M" ? "1D" : "1W";
+  const limit = CHART_VISIBLE_COUNT[range] * 3;
   const j = await fetchJson<{ code?: string; data?: string[][] }>(
     `https://www.okx.com/api/v5/market/candles?instId=${symbol}-USDT&bar=${bar}&limit=${limit}`,
   );
@@ -255,7 +263,9 @@ async function geckoCandles(
   geckoId: string,
   range: ChartRange,
 ): Promise<CandlePoint[] | null> {
-  const days = range === "1D" ? 1 : range === "1M" ? 30 : 365;
+  // Nạp gấp 3 lần để kéo thả: 1D→3 ngày, 1M→90 ngày, 1Y→365 ngày (giới hạn free API
+  // nên khung Năm qua CoinGecko chỉ đủ 1 cửa sổ, không kéo được xa).
+  const days = range === "1D" ? 3 : range === "1M" ? 90 : 365;
   const j = await fetchJson<{ prices?: [number, number][] }>(
     `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart?vs_currency=usd&days=${days}`,
   );

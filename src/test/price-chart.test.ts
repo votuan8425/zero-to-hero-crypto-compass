@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candleIsUp } from "@/components/app/price-chart-dialog";
+import { candleIsUp, clampPan, formatChartTime } from "@/components/app/price-chart-dialog";
 import { bucketPricesToCandles } from "@/lib/prices.functions";
 
 describe("candleIsUp (nến xanh/đỏ)", () => {
@@ -61,5 +61,29 @@ describe("bucketPricesToCandles (gom chuỗi giá thành nến OHLC)", () => {
 
   it("rỗng thì rỗng", () => {
     expect(bucketPricesToCandles([], 1000)).toEqual([]);
+  });
+});
+
+describe("clampPan (kẹp độ lùi khi kéo chart)", () => {
+  it("trong khoảng thì giữ nguyên, vượt thì kẹp về biên", () => {
+    expect(clampPan(0, 72, 24)).toBe(0);
+    expect(clampPan(10, 72, 24)).toBe(10);
+    expect(clampPan(100, 72, 24)).toBe(48);
+    expect(clampPan(-5, 72, 24)).toBe(0);
+  });
+
+  it("không đủ nến ngoài cửa sổ thì không kéo được", () => {
+    expect(clampPan(5, 20, 24)).toBe(0);
+    expect(clampPan(5, 52, 52)).toBe(0);
+  });
+});
+
+describe("formatChartTime (nhãn thời gian dưới trục chart)", () => {
+  const t = new Date(2026, 10, 17, 14, 30).getTime();
+
+  it("Ngày → giờ:phút, Tháng → ngày/tháng, Năm → tháng/năm", () => {
+    expect(formatChartTime(t, "1D")).toBe("14:30");
+    expect(formatChartTime(t, "1M")).toBe("17/11");
+    expect(formatChartTime(t, "1Y")).toBe("11/26");
   });
 });
