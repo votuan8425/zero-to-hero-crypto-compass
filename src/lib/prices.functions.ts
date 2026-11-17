@@ -10,8 +10,17 @@ export interface PricesResult {
   error: string | null;
 }
 
+/** User-Agent trình duyệt thật: một số API/CDN (Cloudflare) chặn UA mặc định
+ *  của server (undici/node) nên server Lovable có lúc không lấy được dữ liệu. */
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
+  const res = await fetch(url, {
+    headers: { accept: "application/json", "user-agent": BROWSER_UA },
+    // Tránh treo cả server function khi API chậm.
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
   return (await res.json()) as T;
 }

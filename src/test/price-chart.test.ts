@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { candleIsUp, clampPan, formatChartTime, formatSelectedTime } from "@/components/app/price-chart-dialog";
 import { bucketPricesToCandles } from "@/lib/prices.functions";
+import { fetchCandlesFromBrowser } from "@/lib/market-client";
 
 describe("candleIsUp (nến xanh/đỏ)", () => {
   it("xanh khi đóng >= mở, đỏ khi đóng < mở", () => {
@@ -95,5 +96,13 @@ describe("formatSelectedTime (nhãn thời gian của nến đang chọn)", () =
     expect(formatSelectedTime(t, "1D")).toBe("17/11 14:30");
     expect(formatSelectedTime(t, "1M")).toBe("17/11/2026");
     expect(formatSelectedTime(t, "1Y")).toBe("11/2026");
+  });
+});
+
+describe("fetchCandlesFromBrowser (dự phòng khi server không lấy được nến)", () => {
+  it("coin không hỗ trợ thì báo lỗi ngay, không gọi mạng", async () => {
+    const res = await fetchCandlesFromBrowser("XXX", "1D");
+    expect(res.points).toEqual([]);
+    expect(res.error).toBe("Coin không hỗ trợ.");
   });
 });

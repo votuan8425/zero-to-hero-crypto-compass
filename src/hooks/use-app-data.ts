@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getPrices, type PricesResult } from "@/lib/prices.functions";
+import { fetchPricesFromBrowser } from "@/lib/market-client";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfolio";
 import { normalizeCurrency, type Currency } from "@/lib/format";
@@ -31,10 +32,24 @@ export function usePrices() {
       try {
         res = await getPrices();
       } catch (e) {
-        if (cached) return stale(cached);
-        throw e;
+        // Server Lovable không lấy được giá (bị chặn/rate-limit) thì lấy
+        // trực tiếp từ trình duyệt (CoinGecko); vẫn lỗi nữa mới dùng giá lưu.
+        try {
+          res = await fetchPricesFromBrowser();
+        } catch {
+          if (cached) return stale(cached);
+          throw e;
+        }
       }
-      if (res.error) return cached ? stale(cached) : res;
+      if (res.error) {
+        try {
+          const direct = await fetchPricesFromBrowser();
+          if (!direct.error) res = direct;
+        } catch {
+          // Giữ nguyên lỗi của server, rơi xuống giá lưu ở dưới.
+        }
+        return cached ? stale(cached) : res;
+      }
       localStorage.setItem(
         PRICE_CACHE,
         JSON.stringify({

@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CoinLogo } from "./coin-logo";
 import { PnlText } from "./stat";
 import { getCoin } from "@/lib/coins";
+import { fetchCandlesFromBrowser } from "@/lib/market-client";
 import {
   CHART_VISIBLE_COUNT,
   getCandles,
@@ -126,7 +127,16 @@ export function PriceChartDialog({
   const coin = symbol ? getCoin(symbol) : undefined;
   const candles = useQuery({
     queryKey: ["candles", symbol, range],
-    queryFn: () => getCandles({ data: { symbol: symbol ?? "", range } }),
+    // Server Lovable là nguồn chính (OKX); khi server không lấy được dữ
+    // liệu (bị chặn/rate-limit) thì lấy trực tiếp từ trình duyệt (CoinGecko)
+    // thay vì báo lỗi — chart vẫn vẽ được.
+    queryFn: async () => {
+      const server = await getCandles({ data: { symbol: symbol ?? "", range } }).catch(
+        () => null,
+      );
+      if (server && !server.error && server.points.length >= 2) return server;
+      return fetchCandlesFromBrowser(symbol ?? "", range);
+    },
     enabled: open && !!symbol,
     staleTime: 60_000,
   });
