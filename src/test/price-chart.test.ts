@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candleIsUp, clampPan, formatChartTime } from "@/components/app/price-chart-dialog";
+import { candleIsUp, clampPan, formatChartTime, formatSelectedTime } from "@/components/app/price-chart-dialog";
 import { bucketPricesToCandles } from "@/lib/prices.functions";
 
 describe("candleIsUp (nến xanh/đỏ)", () => {
@@ -85,5 +85,15 @@ describe("formatChartTime (nhãn thời gian dưới trục chart)", () => {
     expect(formatChartTime(t, "1D")).toBe("14:30");
     expect(formatChartTime(t, "1M")).toBe("17/11");
     expect(formatChartTime(t, "1Y")).toBe("11/26");
+  });
+});
+
+describe("formatSelectedTime (nhãn thời gian của nến đang chọn)", () => {
+  const t = new Date(2026, 10, 17, 14, 30).getTime();
+
+  it("Ngày → ngày/giờ, Tháng → ngày/tháng/năm, Năm → tháng/năm", () => {
+    expect(formatSelectedTime(t, "1D")).toBe("17/11 14:30");
+    expect(formatSelectedTime(t, "1M")).toBe("17/11/2026");
+    expect(formatSelectedTime(t, "1Y")).toBe("11/2026");
   });
 });

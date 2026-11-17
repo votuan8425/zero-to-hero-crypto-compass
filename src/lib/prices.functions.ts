@@ -127,9 +127,19 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
     } catch (e) {
       console.error("okx prices failed", e);
     }
-    if (Object.keys(usd).length < 3) {
+    // Bổ sung coin nào OKX không niêm yết (VD: TON không có trong bảng
+    // tickers SPOT của OKX — đã kiểm chứng) từ CoinGecko; OKX vẫn là nguồn
+    // chính cho các coin đã có giá. Bạc (KAG) không dùng simple/price được
+    // nên vẫn lấy riêng bằng market_chart ở dưới.
+    const missing = COINS.filter(
+      (c) => c.symbol !== "USDT" && c.symbol !== SILVER_SYMBOL && !usd[c.symbol],
+    );
+    if (missing.length > 0) {
       try {
-        usd = { ...(await geckoPrices()), ...usd };
+        const g = await geckoPrices();
+        for (const c of missing) {
+          if (g[c.symbol]) usd[c.symbol] = g[c.symbol];
+        }
       } catch (e) {
         console.error("coingecko prices failed", e);
       }
@@ -236,6 +246,9 @@ async function okxCandles(
   const j = await fetchJson<{ code?: string; data?: string[][] }>(
     `https://www.okx.com/api/v5/market/candles?instId=${symbol}-USDT&bar=${bar}&limit=${limit}`,
   );
+  // Chỉ dùng dữ liệu khi OKX báo thành công (code "0"); lỗi thì trả null
+  // để rơi xuống CoinGecko thay vì vẽ chart từ dữ liệu rỗng/lỗi.
+  if (j.code !== "0") return null;
   const rows = j.data ?? [];
   if (rows.length === 0) return null;
   const pts: CandlePoint[] = rows

@@ -51,6 +51,21 @@ export function formatChartTime(t: number, range: ChartRange): string {
   return `${mm}/${String(d.getFullYear()).slice(2)}`;
 }
 
+/** Nhãn thời gian đầy đủ cho nến đang chọn: 1D→ngày/giờ, 1M→ngày/tháng/năm, 1Y→tháng/năm. */
+export function formatSelectedTime(t: number, range: ChartRange): string {
+  const d = new Date(t);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  if (range === "1D") {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}/${mm} ${hh}:${min}`;
+  }
+  if (range === "1M") return `${dd}/${mm}/${yyyy}`;
+  return `${mm}/${yyyy}`;
+}
+
 const W = 560;
 const H = 224;
 const PAD = 10;
@@ -58,6 +73,11 @@ const LABEL_W = 84; // Gutter phải cho mốc giá.
 const TIME_LABEL_H = 22; // Dải dưới cho nhãn thời gian.
 const PLOT_BOTTOM = H - PAD - TIME_LABEL_H;
 const PLOT_H = PLOT_BOTTOM - PAD;
+/** Hộp thông tin nến đang chọn (giá + % của nến đó). */
+const TIP_W = 112;
+const TIP_H = 44;
+/** Ngưỡng phân biệt bấm (chọn nến) với kéo (pan): di chuyển dưới ngưỡng là bấm. */
+const TAP_SLOP = 6;
 
 /** Segmented control (viên thuốc) cho 2 cụm nút chuyển khoảng và kiểu chart:
  *  khung bo tròn chứa các nút, nút đang chọn nổi lên bằng màu chủ đạo. */
@@ -85,11 +105,21 @@ export function PriceChartDialog({
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
   const [chartType, setChartType] = useState<"line" | "candles">("candles");
-  // Kéo thả (pan): panOffset = số nến đã lùi khỏi cửa sổ mới nhất; dragPx =
-  // độ lệch pixel lúc đang kéo (chưa thả thì chưa chốt cửa sổ).
+  // Kéo thả (pan): panOffset = số nến đã lùi khỏi cửa sổ mới nhất.
   const [panOffset, setPanOffset] = useState(0);
-  const [dragPx, setDragPx] = useState(0);
-  const dragRef = useRef<{ startX: number; startPan: number } | null>(null);
+  // Nến đang chọn (bấm vào nến): chỉ số trong cửa sổ hiển thị, null = chưa chọn.
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startPan: number;
+    moved: boolean;
+  } | null>(null);
+  // Nhóm nến + nhóm nhãn thời gian: lúc kéo thì cập nhật transform trực
+  // tiếp qua DOM (không setState, không re-render) nên kéo mượt, không giật.
+  const candleGroupRef = useRef<SVGGElement | null>(null);
+  const timeGroupRef = useRef<SVGGElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const gradientId = useId();
   const clipPlotId = useId();
   const clipTimeId = useId();
@@ -106,11 +136,13 @@ export function PriceChartDialog({
   const clampedPan = clampPan(panOffset, points.length, VISIBLE);
   const startIndex = Math.max(0, points.length - VISIBLE - clampedPan);
   const visiblePoints = points.slice(startIndex, startIndex + VISIBLE);
-  // Đổi khung thời gian / coin thì về lại cửa sổ mới nhất.
+  // Đổi khung thời gian / coin thì về lại cửa sổ mới nhất, bỏ chọn nến.
   useEffect(() => {
     setPanOffset(0);
-    setDragPx(0);
+    setSelectedIdx(null);
     dragRef.current = null;
+    candleGroupRef.current?.setAttribute("transform", "translate(0, 0)");
+    timeGroupRef.current?.setAttribute("transform", "translate(0, 0)");
   }, [range, symbol]);
   const chart = useMemo(() => {
     if (visiblePoints.length < 2) return null;
@@ -165,13 +197,46 @@ export function PriceChartDialog({
         const p = visiblePoints[i];
         if (!p) return null;
         const lx = Math.min(Math.max(x(i), PAD + 16), PAD + plotW);
-        return { x: lx, label: formatChartTime(p.t, range) };
+        return { idx: i, x: lx, label: formatChartTime(p.t, range) };
       })
-      .filter((t): t is { x: number; label: string } => t !== null);
+      .filter((t): t is { idx: number; x: number; label: string } => t !== null);
     // Mốc giá cuối (giá đóng nến cuối cửa sổ) trên trục phải; ẩn mốc lưới
     // nào quá gần nó để khỏi đè chữ.
     const lastY = last ? y(last.c) : 0;
     const ticksShown = ticks.filter((t) => Math.abs(t.y - lastY) > 9);
+    // Crosshair + hộp thông tin của nến đang chọn: đường đứt nét dọc/ngang
+    // qua nến đó, chấm tròn ở giao điểm, hộp giá + % đặt ở phía đối diện
+    // với nến đang chọn để không che mất nến.
+    let sel: {
+      sx: number;
+      sy: number;
+      close: number;
+      pct: number;
+      up: boolean;
+      boxX: number;
+      boxY: number;
+      timeLabel: string;
+    } | null = null;
+    if (selectedIdx !== null) {
+      const p = visiblePoints[selectedIdx];
+      if (p) {
+        const sx = x(selectedIdx);
+        const sy = y(p.c);
+        const pct = p.o > 0 ? ((p.c - p.o) / p.o) * 100 : 0;
+        const boxX = sx < PAD + plotW / 2 ? PAD + plotW - TIP_W : PAD;
+        const boxY = Math.min(Math.max(sy - TIP_H / 2, PAD), PLOT_BOTTOM - TIP_H);
+        sel = {
+          sx,
+          sy,
+          close: p.c,
+          pct,
+          up: pct >= 0,
+          boxX,
+          boxY,
+          timeLabel: formatSelectedTime(p.t, range),
+        };
+      }
+    }
     return {
       line,
       area,
@@ -182,8 +247,10 @@ export function PriceChartDialog({
       timeLabels,
       lastClose: last?.c ?? null,
       stepPx: plotW / Math.max(1, visiblePoints.length - 1),
+      plotW,
+      sel,
     };
-  }, [visiblePoints, range]);
+  }, [visiblePoints, range, selectedIdx]);
   // Số liệu theo cửa sổ đang xem (đổi khi kéo thả), không theo toàn bộ dữ liệu nạp.
   const lastVisible =
     visiblePoints.length > 0 ? visiblePoints[visiblePoints.length - 1] : undefined;
@@ -199,26 +266,58 @@ export function PriceChartDialog({
   const unit = coin?.unit === "ounce" ? " / ounce" : "";
   const canPan = points.length > VISIBLE;
 
+  function resetDragTransform() {
+    candleGroupRef.current?.setAttribute("transform", "translate(0, 0)");
+    timeGroupRef.current?.setAttribute("transform", "translate(0, 0)");
+  }
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!canPan || !chart) return;
-    dragRef.current = { startX: e.clientX, startPan: clampedPan };
+    if (!chart) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPan: clampedPan,
+      moved: false,
+    };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!dragRef.current) return;
-    setDragPx(e.clientX - dragRef.current.startX);
-  }
-  function endPan(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragRef.current || !chart) return;
-    const deltaPx = e.clientX - dragRef.current.startX;
-    const steps = Math.round(deltaPx / chart.stepPx);
-    // Kéo sang phải → xem nến cũ hơn (tăng độ lùi); kéo sang trái → về nến mới.
-    setPanOffset(clampPan(dragRef.current.startPan + steps, points.length, VISIBLE));
-    setDragPx(0);
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    if (Math.abs(dx) <= TAP_SLOP && Math.abs(dy) <= TAP_SLOP) return;
+    dragRef.current.moved = true;
+    // Bắt đầu kéo thì bỏ chọn nến (crosshair không còn khớp với nến nữa).
+    if (selectedIdx !== null) setSelectedIdx(null);
+    if (!canPan) return;
+    // Cập nhật transform trực tiếp qua DOM, không setState nên không
+    // re-render — kéo mượt 60fps, không giật/lag.
+    candleGroupRef.current?.setAttribute("transform", `translate(${dx}, 0)`);
+    timeGroupRef.current?.setAttribute("transform", `translate(${dx}, 0)`);
+  }
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current || !chart) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    const isTap = Math.abs(dx) < TAP_SLOP && Math.abs(dy) < TAP_SLOP;
+    resetDragTransform();
+    if (isTap && svgRef.current) {
+      // Bấm: chọn nến gần nhất với điểm bấm (bấm lại nến đang chọn thì bỏ chọn).
+      const rect = svgRef.current.getBoundingClientRect();
+      const scaleX = W / rect.width;
+      const svgX = (e.clientX - rect.left) * scaleX;
+      const idx = Math.round((svgX - PAD) / chart.stepPx);
+      const clampedIdx = Math.min(Math.max(0, idx), visiblePoints.length - 1);
+      setSelectedIdx((prev) => (prev === clampedIdx ? null : clampedIdx));
+    } else if (canPan) {
+      // Kéo: chốt độ lùi theo nến (làm tròn theo bước nến).
+      const steps = Math.round(dx / chart.stepPx);
+      setPanOffset(clampPan(dragRef.current.startPan + steps, points.length, VISIBLE));
+      setSelectedIdx(null);
+    }
     dragRef.current = null;
   }
-  function cancelPan() {
-    setDragPx(0);
+  function onPointerCancel() {
+    resetDragTransform();
     dragRef.current = null;
   }
 
@@ -295,8 +394,8 @@ export function PriceChartDialog({
           style={{ cursor: canPan ? "grab" : "default" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={endPan}
-          onPointerCancel={cancelPan}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
         >
           {candles.isLoading ? (
             <div className="grid h-[224px] place-items-center text-sm text-muted-foreground">
@@ -310,6 +409,7 @@ export function PriceChartDialog({
             </div>
           ) : (
             <svg
+              ref={svgRef}
               viewBox={`0 0 ${W} ${H}`}
               className="h-[224px] w-full"
               role="img"
@@ -361,7 +461,7 @@ export function PriceChartDialog({
                   {money(chart.lastClose, currency !== "USDT")}
                 </text>
               )}
-              <g clipPath={`url(#${clipPlotId})`} transform={`translate(${dragPx}, 0)`}>
+              <g ref={candleGroupRef} clipPath={`url(#${clipPlotId})`}>
                 {chartType === "candles" ? (
                   chart.candleBars.map((c, i) => (
                     <g key={i}>
@@ -399,28 +499,102 @@ export function PriceChartDialog({
                   </>
                 )}
               </g>
-              <g clipPath={`url(#${clipTimeId})`} transform={`translate(${dragPx}, 0)`}>
-                {chart.timeLabels.map((t, i) => (
+              <g ref={timeGroupRef} clipPath={`url(#${clipTimeId})`}>
+                {chart.timeLabels
+                  .filter((t) => t.idx !== selectedIdx)
+                  .map((t) => (
+                    <text
+                      key={t.idx}
+                      x={t.x}
+                      y={PLOT_BOTTOM + 16}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="var(--muted-foreground)"
+                    >
+                      {t.label}
+                    </text>
+                  ))}
+              </g>
+              {chart.sel && (
+                <g>
+                  <line
+                    x1={chart.sel.sx}
+                    x2={chart.sel.sx}
+                    y1={PAD}
+                    y2={PLOT_BOTTOM}
+                    stroke="var(--foreground)"
+                    strokeOpacity="0.45"
+                    strokeDasharray="4 4"
+                    strokeWidth="1"
+                  />
+                  <line
+                    x1={PAD}
+                    x2={PAD + chart.plotW}
+                    y1={chart.sel.sy}
+                    y2={chart.sel.sy}
+                    stroke="var(--foreground)"
+                    strokeOpacity="0.45"
+                    strokeDasharray="4 4"
+                    strokeWidth="1"
+                  />
+                  <circle
+                    cx={chart.sel.sx}
+                    cy={chart.sel.sy}
+                    r="4.5"
+                    fill="var(--background)"
+                    stroke="var(--foreground)"
+                    strokeWidth="1.5"
+                  />
                   <text
-                    key={i}
-                    x={t.x}
+                    x={chart.sel.sx}
                     y={PLOT_BOTTOM + 16}
                     textAnchor="middle"
                     fontSize="11"
-                    fill="var(--muted-foreground)"
+                    fontWeight="700"
+                    fill="var(--primary)"
                   >
-                    {t.label}
+                    {chart.sel.timeLabel}
                   </text>
-                ))}
-              </g>
+                  <g>
+                    <rect
+                      x={chart.sel.boxX}
+                      y={chart.sel.boxY}
+                      width={TIP_W}
+                      height={TIP_H}
+                      rx="8"
+                      fill="var(--popover)"
+                      stroke="var(--border)"
+                    />
+                    <text
+                      x={chart.sel.boxX + 10}
+                      y={chart.sel.boxY + 18}
+                      fontSize="13"
+                      fontWeight="700"
+                      fill="var(--popover-foreground)"
+                    >
+                      {money(chart.sel.close, currency !== "USDT")}
+                    </text>
+                    <text
+                      x={chart.sel.boxX + 10}
+                      y={chart.sel.boxY + 35}
+                      fontSize="11"
+                      fontWeight="600"
+                      fill={chart.sel.up ? "var(--gain)" : "var(--loss)"}
+                    >
+                      {chart.sel.pct >= 0 ? "+" : ""}
+                      {formatNumber(chart.sel.pct, 2)}%
+                    </text>
+                  </g>
+                </g>
+              )}
             </svg>
           )}
         </div>
-        {canPan && (
-          <p className="mt-1 text-center text-[11px] text-muted-foreground">
-            Kéo sang phải để xem nến cũ hơn, kéo sang trái để về nến mới nhất.
-          </p>
-        )}
+        <p className="mt-1 text-center text-[11px] text-muted-foreground">
+          {canPan
+            ? "Kéo để xem nến cũ hơn · Bấm vào một nến để xem giá và % của nến đó."
+            : "Bấm vào một nến để xem giá và % của nến đó."}
+        </p>
 
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-surface-raised px-2 py-2.5">

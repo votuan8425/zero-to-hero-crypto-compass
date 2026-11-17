@@ -59,7 +59,7 @@ describe("formatDurationSince", () => {
     expect(formatDurationSince("2026-11-05", now)).toBe("12 ngày");
   });
   it("cùng ngày thì là hôm nay", () => {
-    expect(formatDurationSince("2026-11-17", now)).toBe("Hôm nay");
+    expect(formatDurationSince("2026-11-17", now)).toBe("Bắt đầu hôm nay");
   });
 });
 

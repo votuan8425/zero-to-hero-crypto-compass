@@ -144,14 +144,16 @@ export function computeMonthlyStreak(
 
 /**
  * "Đã tích lũy được bao lâu" từ ngày bắt đầu tới hôm nay:
- * "1 năm 3 tháng", "8 tháng", "12 ngày", "Hôm nay".
+ * "1 năm 3 tháng", "8 tháng", "12 ngày", "Bắt đầu hôm nay".
+ * (Mới bắt đầu trong ngày thì ghi rõ là bắt đầu hôm nay cho khỏi
+ * nghe như lỗi hiển thị.)
  */
 export function formatDurationSince(startDate: string, now: Date = new Date()): string {
   const start = parseDateOnly(startDate);
   if (Number.isNaN(start.getTime())) return "—";
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  if (s > today) return "Hôm nay";
+  if (s > today) return "Bắt đầu hôm nay";
   let years = today.getFullYear() - s.getFullYear();
   let months = today.getMonth() - s.getMonth();
   if (today.getDate() < s.getDate()) months -= 1;
@@ -162,7 +164,7 @@ export function formatDurationSince(startDate: string, now: Date = new Date()): 
   if (years > 0) return months > 0 ? `${years} năm ${months} tháng` : `${years} năm`;
   if (months > 0) return `${months} tháng`;
   const days = Math.round((today.getTime() - s.getTime()) / 86_400_000);
-  return days <= 0 ? "Hôm nay" : `${days} ngày`;
+  return days <= 0 ? "Bắt đầu hôm nay" : `${days} ngày`;
 }
 
 /** Khóa ngày hôm nay (YYYY-MM-DD), dùng cho so sánh nhanh. */
