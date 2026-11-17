@@ -25,11 +25,15 @@ import { formatDateTime, formatNumber, formatPercent } from "@/lib/format";
 import { earliestTxDate, formatDurationSince } from "@/lib/accumulation";
 import { isAdminUser } from "@/lib/admin";
 import {
-  adminAllocationKey,
-  fetchAdminAllocation,
+  fetchPublishedAllocations,
+  publishedAllocationsKey,
+  readFollowedInvestorId,
+  saveFollowedInvestorId,
+  selectPublishedAllocation,
   syncAdminAllocation,
   type AdminAllocation,
 } from "@/lib/admin-allocation";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tham-khao/")({
   head: () => ({
@@ -222,11 +226,23 @@ function ReferencesPage() {
   const refs = useReferences();
   const list = refs.data ?? [];
   const { allocation, totals, txs, prices } = usePortfolio();
-  const adminAllocation = useQuery({
-    queryKey: adminAllocationKey,
-    queryFn: fetchAdminAllocation,
+  const publishedQuery = useQuery({
+    queryKey: publishedAllocationsKey,
+    queryFn: fetchPublishedAllocations,
     staleTime: 60_000,
   });
+  const investors = publishedQuery.data ?? [];
+  // Nhà đầu tư đang theo dõi (lưu trên thiết bị) — bấm một nhà đầu tư trong
+  // danh sách là theo dõi + xem danh mục của họ; lần sau mở lại vẫn thấy họ.
+  const [followedId, setFollowedId] = useState<string | null>(() =>
+    readFollowedInvestorId(),
+  );
+  const selected = selectPublishedAllocation(investors, followedId);
+
+  function followInvestor(userId: string) {
+    setFollowedId(userId);
+    saveFollowedInvestorId(userId);
+  }
   const syncedRef = useRef(false);
   const [deploying, setDeploying] = useState(false);
 
@@ -267,7 +283,7 @@ function ReferencesPage() {
         toast.error("Bạn chưa có giao dịch nào để đăng kèm lời nhắn.");
         return;
       }
-      await qc.invalidateQueries({ queryKey: adminAllocationKey });
+      await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
       setMessageDialogOpen(false);
       toast.success(message.trim() ? "Đã lưu lời nhắn của nhà đầu tư." : "Đã gỡ lời nhắn.");
     } catch (e) {
@@ -283,10 +299,14 @@ function ReferencesPage() {
     if (txs.isLoading || prices.isLoading) return;
     if (allocation.slices.length === 0) return;
     syncedRef.current = true;
-    void syncAdminAllocation(user, allocation, adminStats).catch((e) => {
-      console.error("Không đồng bộ được danh mục admin", e);
-      syncedRef.current = false;
-    });
+    void syncAdminAllocation(user, allocation, adminStats)
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: publishedAllocationsKey });
+      })
+      .catch((e) => {
+        console.error("Không đồng bộ được danh mục admin", e);
+        syncedRef.current = false;
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admin, allocation, txs.isLoading, prices.isLoading, user]);
 
@@ -299,7 +319,7 @@ function ReferencesPage() {
     setDeploying(true);
     try {
       const res = await syncAdminAllocation(user, allocation, adminStats);
-      await qc.invalidateQueries({ queryKey: adminAllocationKey });
+      await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
       toast.success(
         res === "unchanged"
           ? "Portfolio của bạn đã đăng rồi, không có gì thay đổi."
@@ -312,8 +332,11 @@ function ReferencesPage() {
     }
   }
 
-  const published = adminAllocation.data ?? null;
-  const card = published ?? preview;
+  const card = selected ?? preview;
+  // Xem trước khi admin chưa đăng (không có trong danh sách đã đăng).
+  const isPreview = !selected && !!preview;
+  // Chỉ admin mới sửa được lời nhắn — và chỉ trên chính danh mục của mình.
+  const isOwnCard = admin && card?.user_id === user.id;
 
   return (
     <div>
@@ -355,14 +378,72 @@ function ReferencesPage() {
           : "Chỉ admin mới được thêm/sửa danh mục tham khảo. Bạn chỉ xem tỷ lệ % danh mục của admin — không thấy số tiền, số lượng hay ghi chú của admin."}
       </div>
 
-      {adminAllocation.isLoading ? (
+      {/* Danh sách nhà đầu tư đã đăng — chỉ admin mới đăng được (RLS), nên
+          hiện danh sách chỉ có admin sau khi họ bấm "Đăng portfolio". Bấm
+          một nhà đầu tư là theo dõi + xem danh mục của họ như hiện tại. */}
+      {investors.length > 0 && (
+        <section className="mb-5">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider">
+            Nhà đầu tư · {investors.length}
+          </h2>
+          <ul className="space-y-2">
+            {investors.map((inv) => {
+              const isSelected = selected?.user_id === inv.user_id;
+              const isFollowed = followedId === inv.user_id;
+              return (
+                <li key={inv.user_id}>
+                  <button
+                    type="button"
+                    onClick={() => followInvestor(inv.user_id)}
+                    aria-pressed={isFollowed}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors",
+                      isSelected
+                        ? "border-primary/60 bg-primary/10"
+                        : "border-border bg-surface hover:border-primary/40",
+                    )}
+                  >
+                    <span className="lime-gradient grid h-10 w-10 shrink-0 place-items-center rounded-lg text-xs font-black text-primary-foreground">
+                      0→H
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">Admin</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Cập nhật {formatDateTime(inv.updated_at)} · {inv.slices.length} token
+                      </span>
+                    </span>
+                    {inv.pnlPct != null && (
+                      <PnlText value={inv.pnlPct} className="num shrink-0 text-sm font-semibold">
+                        {inv.pnlPct >= 0 ? "+" : ""}
+                        {formatNumber(inv.pnlPct, 1)}%
+                      </PnlText>
+                    )}
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                        isFollowed
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-surface-raised text-muted-foreground",
+                      )}
+                    >
+                      {isFollowed ? "Đang theo dõi" : "Theo dõi"}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {publishedQuery.isLoading ? (
         <Skeleton className="mb-5 h-56" />
       ) : card && card.slices.length > 0 ? (
         <AdminAllocationCard
           allocation={card}
-          preview={!published}
-          isAdmin={admin}
-          onEditMessage={() => setMessageDialogOpen(true)}
+          preview={isPreview}
+          isAdmin={isOwnCard}
+          onEditMessage={isOwnCard ? () => setMessageDialogOpen(true) : undefined}
         />
       ) : (
         <div className="panel mb-5 p-5 text-sm text-muted-foreground">

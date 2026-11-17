@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   allocationChanged,
   buildAdminAllocationSlices,
   messageChanged,
+  readFollowedInvestorId,
+  saveFollowedInvestorId,
+  selectPublishedAllocation,
   statsChanged,
+  type AdminAllocation,
 } from "@/lib/admin-allocation";
 import type { AllocationSlice } from "@/lib/portfolio";
 
@@ -85,5 +89,77 @@ describe("messageChanged (lời nhắn của nhà đầu tư)", () => {
     expect(messageChanged("Chào mọi người", "Tích sản đều đặn")).toBe(true);
     expect(messageChanged("Chào mọi người", "")).toBe(true);
     expect(messageChanged("Chào mọi người", null)).toBe(true);
+  });
+});
+
+function fakeAllocation(user_id: string): AdminAllocation {
+  return {
+    user_id,
+    slices: [{ symbol: "BTC", name: "Bitcoin", percent: 60 }],
+    updated_at: "2026-11-17T10:00:00.000Z",
+    startedAt: "2025-01-01",
+    pnlPct: 12.5,
+    message: null,
+    messageUpdatedAt: null,
+  };
+}
+
+/** localStorage thật trong môi trường test (jsdom dưới Bun) không đầy đủ nên
+ *  dùng bản stub theo mẫu favorites.test.ts. */
+function withStorage(entries: Record<string, string> = {}) {
+  const store = new Map<string, string>(Object.entries(entries));
+  Object.defineProperty(globalThis, "localStorage", {
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => {
+        store.clear();
+      },
+    },
+    configurable: true,
+  });
+}
+
+describe("selectPublishedAllocation (chọn nhà đầu tư để xem)", () => {
+  const admin = fakeAllocation("admin-1");
+  const other = fakeAllocation("user-2");
+
+  it("ưu tiên người đang theo dõi nếu còn trong danh sách", () => {
+    expect(selectPublishedAllocation([admin, other], "user-2")).toBe(other);
+  });
+
+  it("chưa theo dõi ai thì xem người đầu tiên (mới cập nhật nhất)", () => {
+    expect(selectPublishedAllocation([admin, other], null)).toBe(admin);
+  });
+
+  it("người theo dõi không còn trong danh sách thì về người đầu tiên", () => {
+    expect(selectPublishedAllocation([admin], "user-2")).toBe(admin);
+  });
+
+  it("không có ai đăng thì null", () => {
+    expect(selectPublishedAllocation([], "admin-1")).toBeNull();
+    expect(selectPublishedAllocation([], null)).toBeNull();
+  });
+});
+
+describe("followed investor (lưu trên thiết bị)", () => {
+  beforeEach(() => {
+    withStorage();
+  });
+
+  it("mặc định chưa theo dõi ai", () => {
+    expect(readFollowedInvestorId()).toBeNull();
+  });
+
+  it("lưu rồi đọc lại được, gỡ thì về null", () => {
+    saveFollowedInvestorId("admin-1");
+    expect(readFollowedInvestorId()).toBe("admin-1");
+    saveFollowedInvestorId(null);
+    expect(readFollowedInvestorId()).toBeNull();
   });
 });

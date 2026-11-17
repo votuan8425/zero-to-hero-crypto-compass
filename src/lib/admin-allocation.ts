@@ -41,6 +41,46 @@ export interface AdminAllocation {
 
 export const adminAllocationKey = ["admin-allocation"] as const;
 
+/** Query key cho danh sách nhà đầu tư đã đăng (tab Tham khảo). */
+export const publishedAllocationsKey = ["published-allocations"] as const;
+
+/** Key lưu nhà đầu tư đang theo dõi trên thiết bị này. */
+export const FOLLOWED_INVESTOR_KEY = "zth:followed-investor";
+
+/** Id nhà đầu tư đang theo dõi (đã lưu trên thiết bị), null nếu chưa theo dõi ai. */
+export function readFollowedInvestorId(): string | null {
+  try {
+    return localStorage.getItem(FOLLOWED_INVESTOR_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Lưu / gỡ nhà đầu tư đang theo dõi. */
+export function saveFollowedInvestorId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(FOLLOWED_INVESTOR_KEY, id);
+    else localStorage.removeItem(FOLLOWED_INVESTOR_KEY);
+  } catch {
+    /* bỏ qua */
+  }
+}
+
+/**
+ * Chọn nhà đầu tư để xem: người đang theo dõi nếu còn trong danh sách,
+ * không thì người đầu tiên (mới cập nhật nhất), không có ai thì null.
+ */
+export function selectPublishedAllocation(
+  investors: AdminAllocation[],
+  followedId: string | null,
+): AdminAllocation | null {
+  if (investors.length === 0) return null;
+  const followed = followedId
+    ? investors.find((a) => a.user_id === followedId)
+    : undefined;
+  return followed ?? investors[0];
+}
+
 /**
  * Builds the percent-only payload from an allocation. Extra fields on the
  * input (quantity, value, invested, ...) are dropped by construction:
@@ -165,6 +205,36 @@ export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
     }
   }
   return null;
+}
+
+/**
+ * Reads every published allocation — danh sách nhà đầu tư đã đăng để user
+ * chọn và theo dõi (tab Tham khảo). Chỉ admin mới ghi được (RLS), nên
+ * hiện danh sách chỉ có admin sau khi họ bấm "Đăng portfolio". Đọc được
+ * mọi hàng nhờ policy "admin allocation select all". Trả về [] khi bảng
+ * chưa có hoặc migration chưa áp dụng, để UI hiện trạng thái trống.
+ */
+export async function fetchPublishedAllocations(): Promise<AdminAllocation[]> {
+  const selects = [
+    "user_id, slices, updated_at, started_at, pnl_pct, message, message_updated_at",
+    "user_id, slices, updated_at, started_at, pnl_pct",
+    "user_id, slices, updated_at",
+  ];
+  for (const columns of selects) {
+    try {
+      const { data, error } = await supabase
+        .from("admin_allocations")
+        .select(columns)
+        .order("updated_at", { ascending: false });
+      if (!error) {
+        const rows = (data ?? []) as AdminAllocationRow[];
+        return rows.map(parseRow);
+      }
+    } catch {
+      // Thử với ít cột hơn (migration chưa áp dụng).
+    }
+  }
+  return [];
 }
 
 /**
