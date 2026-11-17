@@ -52,12 +52,17 @@ export function parseLegacyRecord(o: unknown, source: string): LegacyRecord | nu
   const symbol = normalizeSymbol(String(symRaw));
   const quantity = Number(qtyRaw);
   if (!symbol || !Number.isFinite(quantity) || quantity <= 0) return null;
-  let price = Number(pick(r, ["price_usd", "priceUsd", "price", "buyPrice", "unitPrice", "avgPrice"]) ?? NaN);
+  let price = Number(
+    pick(r, ["price_usd", "priceUsd", "price", "buyPrice", "unitPrice", "avgPrice"]) ?? NaN,
+  );
   const total = Number(pick(r, ["total", "totalUsd", "cost", "invested", "spent"]) ?? NaN);
   if (!Number.isFinite(price) && Number.isFinite(total)) price = total / quantity;
   if (!Number.isFinite(price) || price < 0) price = 0;
   const fee = Number(pick(r, ["fee", "fee_usd", "feeUsd"]) ?? 0);
-  const tx_date = toDate(pick(r, ["tx_date", "date", "purchaseDate", "createdAt", "created_at", "timestamp", "time"])) ?? toDateKey(new Date());
+  const tx_date =
+    toDate(
+      pick(r, ["tx_date", "date", "purchaseDate", "createdAt", "created_at", "timestamp", "time"]),
+    ) ?? toDateKey(new Date());
   const noteRaw = pick(r, ["note", "notes", "memo", "description"]);
   const stable = JSON.stringify({ symbol, quantity, price, tx_date, id: r["id"] ?? null });
   return {
@@ -77,12 +82,16 @@ export function parseLegacyRecord(o: unknown, source: string): LegacyRecord | nu
 export function extractRecords(value: unknown, source: string, depth = 0): LegacyRecord[] {
   if (depth > 4 || value == null) return [];
   if (Array.isArray(value)) {
-    const direct = value.map((v) => parseLegacyRecord(v, source)).filter((x): x is LegacyRecord => !!x);
+    const direct = value
+      .map((v) => parseLegacyRecord(v, source))
+      .filter((x): x is LegacyRecord => !!x);
     if (direct.length > 0) return direct;
     return value.flatMap((v) => extractRecords(v, source, depth + 1));
   }
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) => extractRecords(v, `${source}.${k}`, depth + 1));
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>
+      extractRecords(v, `${source}.${k}`, depth + 1),
+    );
   }
   return [];
 }
@@ -110,12 +119,20 @@ async function scanIndexedDb(): Promise<LegacyRecord[]> {
   const out: LegacyRecord[] = [];
   const dbs = await indexedDB.databases().catch(() => []);
   for (const info of dbs) {
-    if (!info.name || IGNORED_PREFIXES.some((p) => info.name!.startsWith(p)) || info.name.includes("firebase")) continue;
+    if (
+      !info.name ||
+      IGNORED_PREFIXES.some((p) => info.name!.startsWith(p)) ||
+      info.name.includes("firebase")
+    )
+      continue;
     const db = await new Promise<IDBDatabase | null>((resolve) => {
       const req = indexedDB.open(info.name!);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
-      req.onupgradeneeded = () => { req.transaction?.abort(); resolve(null); };
+      req.onupgradeneeded = () => {
+        req.transaction?.abort();
+        resolve(null);
+      };
     });
     if (!db) continue;
     for (const store of Array.from(db.objectStoreNames)) {

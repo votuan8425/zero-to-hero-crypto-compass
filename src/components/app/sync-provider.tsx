@@ -43,7 +43,10 @@ export function SyncProvider({ userId, children }: { userId: string; children: R
       await qc.invalidateQueries({ queryKey: profileKey(userId) });
       setLastSyncedAt(new Date());
       if (hadPending && applied > 0) toast.success(`Đã đồng bộ ${applied} thay đổi lên đám mây.`);
-      if (conflicts > 0) toast.warning(`${conflicts} thay đổi ngoại tuyến bị bỏ qua vì đã có bản mới hơn từ thiết bị khác.`);
+      if (conflicts > 0)
+        toast.warning(
+          `${conflicts} thay đổi ngoại tuyến bị bỏ qua vì đã có bản mới hơn từ thiết bị khác.`,
+        );
     } finally {
       setSyncing(false);
       refreshPending();
@@ -53,7 +56,10 @@ export function SyncProvider({ userId, children }: { userId: string; children: R
   useEffect(() => {
     setOnline(navigator.onLine);
     refreshPending();
-    const goOnline = () => { setOnline(true); void syncNow(); };
+    const goOnline = () => {
+      setOnline(true);
+      void syncNow();
+    };
     const goOffline = () => setOnline(false);
     const onQueue = () => refreshPending();
     window.addEventListener("online", goOnline);
@@ -73,19 +79,38 @@ export function SyncProvider({ userId, children }: { userId: string; children: R
   useEffect(() => {
     const channel = supabase
       .channel(`sync-${userId}-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${userId}` }, () => {
-        void qc.invalidateQueries({ queryKey: txKey(userId) });
-        setLastSyncedAt(new Date());
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "reference_portfolios", filter: `user_id=eq.${userId}` }, () => {
-        void qc.invalidateQueries({ queryKey: refsKey(userId) });
-        setLastSyncedAt(new Date());
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${userId}` }, () => {
-        void qc.invalidateQueries({ queryKey: profileKey(userId) });
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${userId}` },
+        () => {
+          void qc.invalidateQueries({ queryKey: txKey(userId) });
+          setLastSyncedAt(new Date());
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "reference_portfolios",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void qc.invalidateQueries({ queryKey: refsKey(userId) });
+          setLastSyncedAt(new Date());
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles", filter: `id=eq.${userId}` },
+        () => {
+          void qc.invalidateQueries({ queryKey: profileKey(userId) });
+        },
+      )
       .subscribe((status) => setRealtime(status === "SUBSCRIBED"));
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [qc, userId]);
 
   return (

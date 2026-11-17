@@ -12,7 +12,9 @@ export interface PricesResult {
 /** Public market prices (no user data) from CoinGecko, in USD and VND. */
 export const getPrices = createServerFn({ method: "POST" })
   .inputValidator((input: { symbols: string[] }) => ({
-    symbols: Array.isArray(input?.symbols) ? input.symbols.slice(0, 60).map((s) => String(s).toUpperCase()) : [],
+    symbols: Array.isArray(input?.symbols)
+      ? input.symbols.slice(0, 60).map((s) => String(s).toUpperCase())
+      : [],
   }))
   .handler(async ({ data }): Promise<PricesResult> => {
     const wanted = new Set([...data.symbols, "USDT"]);
@@ -24,17 +26,26 @@ export const getPrices = createServerFn({ method: "POST" })
         { headers: { accept: "application/json" } },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as Record<string, { usd?: number; vnd?: number; usd_24h_change?: number }>;
+      const json = (await res.json()) as Record<
+        string,
+        { usd?: number; vnd?: number; usd_24h_change?: number }
+      >;
       const prices: PriceMap = {};
       for (const c of coins) {
         const p = json[c.geckoId];
-        if (p?.usd != null) prices[c.symbol] = { usd: p.usd, vnd: p.vnd ?? 0, change24h: p.usd_24h_change ?? null };
+        if (p?.usd != null)
+          prices[c.symbol] = { usd: p.usd, vnd: p.vnd ?? 0, change24h: p.usd_24h_change ?? null };
       }
       const usdt = json["tether"];
       const usdVnd = usdt?.usd && usdt?.vnd ? usdt.vnd / usdt.usd : null;
       return { prices, usdVnd, fetchedAt: new Date().toISOString(), error: null };
     } catch (e) {
       console.error("price fetch failed", e);
-      return { prices: {}, usdVnd: null, fetchedAt: new Date().toISOString(), error: "Không tải được giá thị trường. Vui lòng thử lại sau." };
+      return {
+        prices: {},
+        usdVnd: null,
+        fetchedAt: new Date().toISOString(),
+        error: "Không tải được giá thị trường. Vui lòng thử lại sau.",
+      };
     }
   });

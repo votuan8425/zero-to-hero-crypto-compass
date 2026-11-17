@@ -46,7 +46,11 @@ Rules — accuracy over completeness:
 - unreadable_notes: in Vietnamese, list anything you could not read or identify (empty string if none).
 - summary: one or two Vietnamese sentences describing the portfolio, stating only facts visible in the image.`;
 
-export async function extractPortfolio(images: { dataUrl: string }[], apiKey: string, signal?: AbortSignal): Promise<Extraction> {
+export async function extractPortfolio(
+  images: { dataUrl: string }[],
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<Extraction> {
   const runIdFetch = createLovableAiGatewayRunIdFetch();
   const provider = createOpenAI({
     baseURL: GATEWAY_URL,

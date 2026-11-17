@@ -51,7 +51,11 @@ export function usePortfolio() {
 }
 
 /** Converts a USD amount to the display currency. */
-export function convertUsd(usd: number | null, currency: Currency, usdVnd: number | null): number | null {
+export function convertUsd(
+  usd: number | null,
+  currency: Currency,
+  usdVnd: number | null,
+): number | null {
   if (usd == null) return null;
   if (currency === "USD") return usd;
   return usdVnd ? usd * usdVnd : null;
