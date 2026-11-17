@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { allocationChanged, buildAdminAllocationSlices, statsChanged } from "@/lib/admin-allocation";
+import {
+  allocationChanged,
+  buildAdminAllocationSlices,
+  messageChanged,
+  statsChanged,
+} from "@/lib/admin-allocation";
 import type { AllocationSlice } from "@/lib/portfolio";
 
 describe("admin allocation payload is percent-only", () => {
@@ -63,5 +68,22 @@ describe("statsChanged", () => {
     expect(statsChanged(prev, { startedAt: "2025-01-02", pnlPct: 12.5 })).toBe(true);
     expect(statsChanged(prev, { startedAt: "2025-01-02", pnlPct: -5 })).toBe(true);
     expect(statsChanged(null, { startedAt: "2025-01-02", pnlPct: 12.3 })).toBe(true);
+  });
+});
+
+describe("messageChanged (lời nhắn của nhà đầu tư)", () => {
+  it("null, rỗng và khoảng trắng coi như nhau", () => {
+    expect(messageChanged(null, "")).toBe(false);
+    expect(messageChanged("", "   ")).toBe(false);
+    expect(messageChanged(undefined, null)).toBe(false);
+  });
+  it("bỏ qua khoảng trắng đầu/cuối khi so sánh", () => {
+    expect(messageChanged("  Tích sản đều đặn  ", "Tích sản đều đặn")).toBe(false);
+  });
+  it("đổi khi nội dung khác, kể cả xóa lời nhắn", () => {
+    expect(messageChanged(null, "Chào mọi người")).toBe(true);
+    expect(messageChanged("Chào mọi người", "Tích sản đều đặn")).toBe(true);
+    expect(messageChanged("Chào mọi người", "")).toBe(true);
+    expect(messageChanged("Chào mọi người", null)).toBe(true);
   });
 });

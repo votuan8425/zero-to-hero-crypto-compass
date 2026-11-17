@@ -2,9 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BookMarked, GitCompareArrows, Info, Plus, Rocket } from "lucide-react";
+import { BookMarked, GitCompareArrows, Info, MessageSquareQuote, Pencil, Plus, Quote, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
 import { DonutChart, CHART_COLORS } from "@/components/app/donut-chart";
@@ -47,9 +56,13 @@ export const Route = createFileRoute("/_authenticated/tham-khao/")({
 function AdminAllocationCard({
   allocation,
   preview,
+  isAdmin,
+  onEditMessage,
 }: {
   allocation: AdminAllocation;
   preview?: boolean;
+  isAdmin?: boolean;
+  onEditMessage?: () => void;
 }) {
   const pnl = allocation.pnlPct;
   return (
@@ -96,7 +109,109 @@ function AdminAllocationCard({
         centerLabel="token"
         centerValue={String(allocation.slices.length)}
       />
+      {allocation.message ? (
+        <figure className="relative mt-5 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-surface to-surface p-5">
+          <Quote
+            className="pointer-events-none absolute -right-3 -top-3 h-24 w-24 text-primary/10"
+            aria-hidden
+          />
+          <figcaption className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
+            <MessageSquareQuote className="h-4 w-4" /> Lời nhắn của nhà đầu tư
+          </figcaption>
+          <blockquote className="mt-3 whitespace-pre-wrap text-[15px] font-medium leading-relaxed">
+            {allocation.message}
+          </blockquote>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="lime-gradient grid h-6 w-6 shrink-0 place-items-center rounded-md text-[10px] font-black text-primary-foreground">
+              0→H
+            </span>
+            <span className="font-medium text-foreground">Admin</span>
+            {allocation.messageUpdatedAt && (
+              <>
+                <span aria-hidden>·</span>
+                <span>Cập nhật {formatDateTime(allocation.messageUpdatedAt)}</span>
+              </>
+            )}
+            {isAdmin && onEditMessage && (
+              <button
+                type="button"
+                onClick={onEditMessage}
+                className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Sửa
+              </button>
+            )}
+          </div>
+        </figure>
+      ) : (
+        isAdmin &&
+        onEditMessage && (
+          <button
+            type="button"
+            onClick={onEditMessage}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+          >
+            <MessageSquareQuote className="h-4 w-4" /> Thêm lời nhắn của nhà đầu tư
+          </button>
+        )
+      )}
     </section>
+  );
+}
+
+const MESSAGE_MAX = 500;
+
+/** Dialog để admin viết/sửa lời nhắn của nhà đầu tư (để trống để gỡ). */
+function AdminMessageDialog({
+  open,
+  onOpenChange,
+  initial,
+  saving,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  initial: string;
+  saving: boolean;
+  onSave: (message: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  useEffect(() => {
+    if (open) setValue(initial);
+  }, [open, initial]);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Lời nhắn của nhà đầu tư</DialogTitle>
+          <DialogDescription>
+            Lời nhắn hiển thị cùng danh mục đã đăng trên tab Tham khảo cho mọi người dùng. Lưu
+            lời nhắn cũng đăng lại danh mục hiện tại của bạn.
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value.slice(0, MESSAGE_MAX))}
+          rows={5}
+          placeholder="Ví dụ: Tích sản đều đặn, đừng để cảm xúc quyết định. Tháng này mình vẫn giữ nguyên tỷ lệ ETH và BTC."
+          className="resize-none"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {value.trim() ? `${value.trim().length}/${MESSAGE_MAX} ký tự` : "Để trống để gỡ lời nhắn"}
+          </span>
+          <span>Chỉ text — không hiển thị số tiền hay số lượng.</span>
+        </div>
+        <DialogFooter>
+          <Button variant="surface" onClick={() => onOpenChange(false)} disabled={saving}>
+            Hủy
+          </Button>
+          <Button variant="hero" onClick={() => onSave(value)} disabled={saving}>
+            {saving ? "Đang lưu…" : "Lưu lời nhắn"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -133,8 +248,34 @@ function ReferencesPage() {
           updated_at: new Date().toISOString(),
           startedAt: adminStats.startedAt,
           pnlPct: adminStats.pnlPct,
+          // Chưa đăng nên chưa có lời nhắn (lưu lời nhắn sẽ đăng kèm danh mục).
+          message: null,
+          messageUpdatedAt: null,
         }
       : null;
+
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [savingMessage, setSavingMessage] = useState(false);
+
+  // Lưu lời nhắn của nhà đầu tư kèm danh mục hiện tại (đăng lại portfolio).
+  async function saveMessage(message: string) {
+    if (savingMessage) return;
+    setSavingMessage(true);
+    try {
+      const res = await syncAdminAllocation(user, allocation, adminStats, message);
+      if (res === "skipped") {
+        toast.error("Bạn chưa có giao dịch nào để đăng kèm lời nhắn.");
+        return;
+      }
+      await qc.invalidateQueries({ queryKey: adminAllocationKey });
+      setMessageDialogOpen(false);
+      toast.success(message.trim() ? "Đã lưu lời nhắn của nhà đầu tư." : "Đã gỡ lời nhắn.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Không lưu được lời nhắn. Vui lòng thử lại.");
+    } finally {
+      setSavingMessage(false);
+    }
+  }
 
   // Admin: đồng bộ tỷ lệ % danh mục của mình lên tab Tham khảo mỗi lần vào.
   useEffect(() => {
@@ -217,12 +358,25 @@ function ReferencesPage() {
       {adminAllocation.isLoading ? (
         <Skeleton className="mb-5 h-56" />
       ) : card && card.slices.length > 0 ? (
-        <AdminAllocationCard allocation={card} preview={!published} />
+        <AdminAllocationCard
+          allocation={card}
+          preview={!published}
+          isAdmin={admin}
+          onEditMessage={() => setMessageDialogOpen(true)}
+        />
       ) : (
         <div className="panel mb-5 p-5 text-sm text-muted-foreground">
           Admin chưa công bố danh mục tham khảo.
         </div>
       )}
+
+      <AdminMessageDialog
+        open={messageDialogOpen}
+        onOpenChange={setMessageDialogOpen}
+        initial={card?.message ?? ""}
+        saving={savingMessage}
+        onSave={(message) => void saveMessage(message)}
+      />
 
       {!admin ? null : refs.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

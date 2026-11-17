@@ -33,6 +33,10 @@ export interface AdminAllocation {
   updated_at: string;
   startedAt: string | null;
   pnlPct: number | null;
+  /** Lời nhắn của nhà đầu tư (tab Tham khảo) — chỉ text, không số tiền. */
+  message: string | null;
+  /** Lúc lời nhắn được cập nhật lần cuối. */
+  messageUpdatedAt: string | null;
 }
 
 export const adminAllocationKey = ["admin-allocation"] as const;
@@ -83,23 +87,36 @@ export function statsChanged(
   return Math.abs(p - n) > 0.01;
 }
 
+/** True khi lời nhắn thay đổi (so sánh sau khi trim; null và "" coi như nhau). */
+export function messageChanged(
+  prev: string | null | undefined,
+  next: string | null | undefined,
+): boolean {
+  return (prev ?? "").trim() !== (next ?? "").trim();
+}
+
 type AdminAllocationRow = {
   user_id: string;
   slices: unknown;
   updated_at: string;
   started_at?: string | null;
   pnl_pct?: number | string | null;
+  message?: string | null;
+  message_updated_at?: string | null;
 };
 
 function parseRow(row: AdminAllocationRow): AdminAllocation {
   const pnl =
     row.pnl_pct == null || row.pnl_pct === "" ? null : Number(row.pnl_pct);
+  const message = (row.message ?? "").trim();
   return {
     user_id: row.user_id,
     slices: parseSlices(row.slices),
     updated_at: row.updated_at,
     startedAt: row.started_at ?? null,
     pnlPct: Number.isFinite(pnl) ? pnl : null,
+    message: message ? row.message : null,
+    messageUpdatedAt: row.message_updated_at ?? null,
   };
 }
 
@@ -122,32 +139,32 @@ function parseSlices(raw: unknown): AdminAllocationSlice[] {
  * Reads the single admin allocation row. Returns null when there is none
  * yet — including when the admin_allocations table does not exist yet
  * (migration 0002 not applied); the UI shows an empty state instead of
- * crashing. When migration 0003 (started_at / pnl_pct) has not been
- * applied yet, the stats fall back to null instead of failing the read.
+ * crashing. When migration 0003 (started_at / pnl_pct) or 0005 (message)
+ * has not been applied yet, the read falls back to narrower columns and
+ * the missing values simply show as unavailable.
  */
 export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
-  try {
-    const { data, error } = await supabase
-      .from("admin_allocations")
-      .select("user_id, slices, updated_at, started_at, pnl_pct")
-      .limit(1)
-      .maybeSingle();
-    if (!error) {
-      const row = data as AdminAllocationRow | null;
-      return row ? parseRow(row) : null;
+  const selects = [
+    "user_id, slices, updated_at, started_at, pnl_pct, message, message_updated_at",
+    "user_id, slices, updated_at, started_at, pnl_pct",
+    "user_id, slices, updated_at",
+  ];
+  for (const columns of selects) {
+    try {
+      const { data, error } = await supabase
+        .from("admin_allocations")
+        .select(columns)
+        .limit(1)
+        .maybeSingle();
+      if (!error) {
+        const row = data as AdminAllocationRow | null;
+        return row ? parseRow(row) : null;
+      }
+    } catch {
+      // Thử với ít cột hơn (migration chưa áp dụng).
     }
-    // Cột stats chưa có (chưa chạy migration 0003): đọc lại theo cột cũ.
-    const legacy = await supabase
-      .from("admin_allocations")
-      .select("user_id, slices, updated_at")
-      .limit(1)
-      .maybeSingle();
-    if (legacy.error) return null;
-    const row = legacy.data as AdminAllocationRow | null;
-    return row ? parseRow(row) : null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 /**
@@ -156,40 +173,77 @@ export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
  * No-op for non-admin users and for empty allocations. Only writes when
  * the payload actually changed. When migration 0003 has not been applied
  * yet, the stats are dropped and only the slices are written.
+ *
+ * `message` is optional: pass `undefined` (default) to leave the stored
+ * investor message untouched (this is what the automatic sync does);
+ * pass a string (empty string clears it) to set it together with the
+ * portfolio. Throws a clear error when the message column does not
+ * exist yet (migration 0005 not applied).
  */
 export async function syncAdminAllocation(
   user: User,
   allocation: { slices: AllocationSlice[] },
   stats: AdminAllocationStats = { startedAt: null, pnlPct: null },
+  message?: string | null,
 ): Promise<"synced" | "unchanged" | "skipped"> {
   if (!isAdminUser(user)) return "skipped";
   const slices = buildAdminAllocationSlices(allocation.slices);
   if (slices.length === 0) return "skipped";
+  const normalizedMessage =
+    message === undefined ? undefined : message.trim() ? message.trim() : null;
   const existing = await fetchAdminAllocation();
   if (
     existing &&
     existing.user_id === user.id &&
     !allocationChanged(existing.slices, slices) &&
-    !statsChanged(existing, stats)
+    !statsChanged(existing, stats) &&
+    (normalizedMessage === undefined || !messageChanged(existing.message, normalizedMessage))
   ) {
     return "unchanged";
   }
-  const payload = {
+  const payload: Record<string, unknown> = {
     user_id: user.id,
     slices,
     started_at: stats.startedAt,
     pnl_pct: stats.pnlPct,
   };
+  if (normalizedMessage !== undefined) {
+    payload.message = normalizedMessage;
+    payload.message_updated_at = new Date().toISOString();
+  }
   const { error } = await supabase
     .from("admin_allocations")
     .upsert(payload, { onConflict: "user_id" });
   if (error) {
-    // Cột stats chưa có: ghi lại chỉ với slices.
+    // Cột message chưa có (chưa chạy migration 0005) và đang lưu lời nhắn.
+    if (isMissingMessageColumn(error)) {
+      throw new Error(
+        "Chưa chạy migration 0005 — hãy chạy drizzle/migrations/0005_admin_message.sql trong Supabase SQL editor rồi lưu lại.",
+      );
+    }
+    // Cột stats chưa có: ghi lại chỉ với slices (+ lời nhắn nếu có).
+    const retry: Record<string, unknown> = { user_id: user.id, slices };
+    if (normalizedMessage !== undefined) {
+      retry.message = normalizedMessage;
+      retry.message_updated_at = new Date().toISOString();
+    }
     const fallback = await supabase
       .from("admin_allocations")
-      .upsert({ user_id: user.id, slices }, { onConflict: "user_id" });
-    if (fallback.error) throw fallback.error;
+      .upsert(retry, { onConflict: "user_id" });
+    if (fallback.error) {
+      if (isMissingMessageColumn(fallback.error)) {
+        throw new Error(
+          "Chưa chạy migration 0005 — hãy chạy drizzle/migrations/0005_admin_message.sql trong Supabase SQL editor rồi lưu lại.",
+        );
+      }
+      throw fallback.error;
+    }
     return "synced";
   }
   return "synced";
+}
+
+/** True khi lỗi là "cột message chưa tồn tại" (Postgres 42703). */
+function isMissingMessageColumn(error: { code?: string; message?: string }): boolean {
+  return error.code === "42703" && /message/i.test(error.message ?? "");
 }
