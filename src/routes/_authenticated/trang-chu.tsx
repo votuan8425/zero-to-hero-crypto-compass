@@ -20,7 +20,7 @@ import { CoinLogo } from "@/components/app/coin-logo";
 import { PriceChartDialog } from "@/components/app/price-chart-dialog";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
-import { computeStreak } from "@/lib/portfolio";
+import { computeMonthlyStreak, groupByMonth, monthKeyOf, monthLabel } from "@/lib/accumulation";
 import { GOLD_SYMBOL } from "@/lib/prices.functions";
 import type { PriceMap } from "@/lib/portfolio";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
@@ -55,7 +55,16 @@ function HomePage() {
     queryFn: scanLegacyData,
     staleTime: Infinity,
   });
-  const streak = computeStreak((txs.data ?? []).map((t) => t.tx_date));
+  const monthly = useMemo(
+    () => computeMonthlyStreak(txs.data ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [txs.data],
+  );
+  const thisMonth = useMemo(() => {
+    const groups = groupByMonth(txs.data ?? []);
+    return groups.find((g) => g.key === monthKeyOf(new Date())) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txs.data]);
   const money = (usd: number | null, compact = false) =>
     formatMoney(convertUsd(usd, currency, usdVnd), currency, { compact });
 
@@ -131,15 +140,25 @@ function HomePage() {
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat
           icon={<Flame className="h-3.5 w-3.5 text-primary" />}
-          label="Chuỗi tích sản"
-          value={`${streak.current} ngày`}
-          hint={`Dài nhất: ${streak.longest} ngày`}
+          label="Tháng đã tích"
+          value={`${monthly.months} tháng`}
+          hint={
+            monthly.months > 0
+              ? `Chuỗi tháng dài nhất: ${monthly.longest} tháng`
+              : "Chưa có tháng nào"
+          }
         />
         <Stat
           icon={<CalendarCheck className="h-3.5 w-3.5" />}
-          label="Ngày tích sản"
-          value={streak.activeDays}
-          hint={streak.lastDate ? `Gần nhất: ${formatDate(streak.lastDate)}` : "Chưa có"}
+          label="Tháng này"
+          value={`${monthly.currentMonthBuys} lần mua`}
+          hint={
+            thisMonth
+              ? `Tổng vốn: ${money(thisMonth.investedUsd)}`
+              : monthly.latestMonth
+                ? `Gần nhất: ${monthLabel(monthly.latestMonth)}`
+                : "Chưa có giao dịch"
+          }
         />
         <Stat
           icon={<Layers className="h-3.5 w-3.5" />}
@@ -271,8 +290,8 @@ function MarketPrices({
         <span className="text-xs text-muted-foreground">{COINS.length} coin · từ OKX</span>
       </div>
       <p className="mb-4 mt-1 text-xs text-muted-foreground">
-        Bấm ngôi sao để ghim tối đa 3 coin yêu thích lên đầu · Bấm vào coin để xem biểu đồ · Vàng
-        theo PAXG (1 PAXG ≈ 1 ounce)
+        Hiện 3 coin — kéo xuống để xem hết · Bấm ngôi sao để ghim tối đa 3 coin yêu thích lên
+        đầu · Bấm vào coin để xem biểu đồ · Vàng theo PAXG (1 PAXG ≈ 1 ounce)
       </p>
       {loading ? (
         <div className="space-y-2">
@@ -281,7 +300,7 @@ function MarketPrices({
           <Skeleton className="h-12" />
         </div>
       ) : (
-        <ul className="max-h-[430px] divide-y divide-border overflow-y-auto pr-1">
+        <ul className="max-h-[232px] divide-y divide-border overflow-y-auto pr-1">
           {rows.map((c) => {
             const q = prices?.[c.symbol];
             const isFav = favorites.includes(c.symbol);
@@ -290,7 +309,7 @@ function MarketPrices({
                 <button
                   type="button"
                   onClick={() => setChartSymbol(c.symbol)}
-                  className="flex w-full items-center gap-3 py-3 text-left transition-colors first:pt-0 last:pb-0 hover:bg-surface-raised/40"
+                  className="flex w-full items-center gap-3 py-4 text-left transition-colors hover:bg-surface-raised/40"
                   aria-label={`Xem biểu đồ ${c.name}`}
                 >
                   <CoinLogo symbol={c.symbol} size={36} />

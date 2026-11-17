@@ -25,6 +25,7 @@ const RANGES: { value: ChartRange; label: string }[] = [
 const W = 560;
 const H = 200;
 const PAD = 10;
+const LABEL_W = 84; // Gutter phải cho mốc giá.
 
 /** Popup biểu đồ giá theo ngày / tháng / năm — kiểu OKX, dùng chung Dialog với "Thêm lần mua". */
 export function PriceChartDialog({
@@ -55,21 +56,33 @@ export function PriceChartDialog({
   const chart = useMemo(() => {
     if (points.length < 2) return null;
     const values = points.map((p) => p.c);
-    let min = Math.min(...values);
-    let max = Math.max(...values);
-    if (max === min) {
-      min = max * 0.999;
-      max = max * 1.001;
+    let rawMin = Math.min(...values);
+    let rawMax = Math.max(...values);
+    if (rawMax === rawMin) {
+      rawMin = rawMax * 0.999;
+      rawMax = rawMax * 1.001;
     }
-    const pad = (max - min) * 0.08;
-    min -= pad;
-    max += pad;
-    const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
+    const pad = (rawMax - rawMin) * 0.08;
+    const min = rawMin - pad;
+    const max = rawMax + pad;
+    const x = (i: number) =>
+      PAD + (i / (points.length - 1)) * (W - PAD * 2 - LABEL_W);
     const y = (v: number) => PAD + (1 - (v - min) / (max - min)) * (H - PAD * 2);
     const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
     const area = `${line} L${x(points.length - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
     const last = points[points.length - 1];
-    return { line, area, lastX: last ? x(points.length - 1) : 0, lastY: last ? y(last.c) : 0, min, max };
+    // Mốc giá theo dữ liệu thật (cao nhất → thấp nhất), hiển thị ở trục phải.
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+      const value = rawMax - f * (rawMax - rawMin);
+      return { value, y: y(value) };
+    });
+    return {
+      line,
+      area,
+      lastX: last ? x(points.length - 1) : 0,
+      lastY: last ? y(last.c) : 0,
+      ticks,
+    };
   }, [points]);
   const change = candles.data?.changePct ?? null;
   const up = (change ?? 0) >= 0;
@@ -148,17 +161,27 @@ export function PriceChartDialog({
                   <stop offset="100%" stopColor={up ? "var(--gain)" : "var(--loss)"} stopOpacity="0" />
                 </linearGradient>
               </defs>
-              {[0.25, 0.5, 0.75].map((f) => (
-                <line
-                  key={f}
-                  x1={PAD}
-                  x2={W - PAD}
-                  y1={H * f}
-                  y2={H * f}
-                  stroke="var(--border)"
-                  strokeDasharray="3 5"
-                  strokeWidth="1"
-                />
+              {chart.ticks.map((t) => (
+                <g key={t.value}>
+                  <line
+                    x1={PAD}
+                    x2={W - PAD - LABEL_W}
+                    y1={t.y}
+                    y2={t.y}
+                    stroke="var(--border)"
+                    strokeDasharray="3 5"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={W - 6}
+                    y={t.y + 4}
+                    textAnchor="end"
+                    fontSize="11"
+                    fill="var(--muted-foreground)"
+                  >
+                    {money(t.value, currency === "VND")}
+                  </text>
+                </g>
               ))}
               <path d={chart.area} fill={`url(#${gradientId})`} />
               <path

@@ -37,12 +37,13 @@ import { useUser } from "@/hooks/use-user";
 import { deleteTransaction } from "@/lib/data";
 import { readQueue } from "@/lib/offline-queue";
 import {
+  computeMonthlyStreak,
   groupByMonth,
   monthLabel,
   yearTotals,
   type MonthGroup,
 } from "@/lib/accumulation";
-import { computeStreak, type Tx } from "@/lib/portfolio";
+import type { Tx } from "@/lib/portfolio";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { displaySymbol } from "@/lib/coins";
 import { cn } from "@/lib/utils";
@@ -95,7 +96,7 @@ function AccumulatePage() {
   }, [search.add, navigate]);
 
   const list = txs.data ?? [];
-  const streak = computeStreak(list.map((t) => t.tx_date));
+  const monthly = useMemo(() => computeMonthlyStreak(list), [list]);
   const groups = useMemo(() => groupByMonth(list), [list]);
   const pendingIds = useMemo(
     () => new Set(readQueue(user.id).map((o) => o.id)),
@@ -166,7 +167,7 @@ function AccumulatePage() {
                 variant="ghost"
                 size="icon"
                 aria-label="Năm trước"
-                disabled={year <= firstYear}
+                disabled={year <= firstYear - 5}
                 onClick={() => {
                   setYear(year - 1);
                   setSelectedKey(null);
@@ -214,8 +215,28 @@ function AccumulatePage() {
                           ? `${monthLabel(key)}: ${g.buys} lần mua, ${money(g.investedUsd)}`
                           : `Tháng ${m}: chưa có giao dịch`
                       }
-                      className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                      className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
                     >
+                      {isSel && g && (
+                        <span
+                          className={cn(
+                            "absolute top-0 z-20 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-3 py-2 text-left shadow-lg",
+                            i <= 1
+                              ? "left-0"
+                              : i >= 10
+                                ? "right-0"
+                                : "left-1/2 -translate-x-1/2",
+                          )}
+                        >
+                          <span className="block text-xs font-bold">{monthLabel(key)}</span>
+                          <span className="num mt-0.5 block text-xs text-muted-foreground">
+                            {g.buys} lần mua · {money(g.investedUsd)}
+                          </span>
+                          <span className="num block text-xs text-muted-foreground">
+                            TB {money(g.buys ? g.investedUsd / g.buys : null)}/lần
+                          </span>
+                        </span>
+                      )}
                       <span className="num text-[10px] font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                         {g ? g.buys : ""}
                       </span>
@@ -277,17 +298,22 @@ function AccumulatePage() {
               hint={`${list.length} lần mua`}
             />
             <Stat
-              icon={<Trophy className="h-3.5 w-3.5" />}
-              label="Chuỗi dài nhất"
-              value={`${streak.longest} ngày`}
+              icon={<CalendarDays className="h-3.5 w-3.5" />}
+              label="Số tháng đã tích"
+              value={`${monthly.months} tháng`}
+              hint={
+                monthly.firstMonth
+                  ? `Từ ${monthLabel(monthly.firstMonth)}`
+                  : "Chưa có tháng nào"
+              }
             />
             <Stat
-              icon={<CalendarDays className="h-3.5 w-3.5" />}
-              label="Tổng ngày tích sản"
-              value={streak.activeDays}
+              icon={<Trophy className="h-3.5 w-3.5" />}
+              label="Chuỗi tháng dài nhất"
+              value={`${monthly.longest} tháng`}
               hint={
-                streak.current > 0
-                  ? `Chuỗi hiện tại: ${streak.current} ngày`
+                monthly.current > 0
+                  ? `Chuỗi hiện tại: ${monthly.current} tháng`
                   : "Chưa có chuỗi đang chạy"
               }
             />

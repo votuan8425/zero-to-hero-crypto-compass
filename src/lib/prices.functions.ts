@@ -80,14 +80,22 @@ async function paxgGeckoPrice(): Promise<{ usd: number; change24h: number | null
   return null;
 }
 
-/** Fallback riêng cho bạc khi OKX không có cặp bạc: CoinGecko kinesis-silver, không cần key. */
+/**
+ * Giá bạc khi OKX không có cặp bạc: CoinGecko kinesis-silver, không cần key.
+ * Lưu ý: simple/price trả về {} cho coin này (đã kiểm chứng 17/11/2026),
+ * nên dùng market_chart 1 ngày và lấy điểm cuối làm giá hiện tại.
+ */
 async function kagGeckoPrice(): Promise<{ usd: number; change24h: number | null } | null> {
   try {
-    const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
-      "https://api.coingecko.com/api/v3/simple/price?ids=kinesis-silver&vs_currencies=usd&include_24hr_change=true",
+    const j = await fetchJson<{ prices?: [number, number][] }>(
+      "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=1",
     );
-    const p = j["kinesis-silver"];
-    if (p?.usd != null) return { usd: p.usd, change24h: p.usd_24h_change ?? null };
+    const rows = (j.prices ?? []).filter(([, c]) => Number.isFinite(c) && c > 0);
+    if (rows.length < 2) return null;
+    const first = rows[0]?.[1] ?? 0;
+    const last = rows[rows.length - 1]?.[1] ?? 0;
+    if (!(last > 0) || !(first > 0)) return null;
+    return { usd: last, change24h: ((last - first) / first) * 100 };
   } catch (e) {
     console.error("kag coingecko failed", e);
   }

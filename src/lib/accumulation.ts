@@ -79,6 +79,69 @@ export function earliestTxDate(txs: readonly Tx[]): string | null {
   return min || null;
 }
 
+export interface MonthlyStreak {
+  /** Số tháng khác nhau đã có giao dịch. */
+  months: number;
+  /** Chuỗi tháng liên tiếp dài nhất (mỗi tháng ít nhất 1 lần mua). */
+  longest: number;
+  /** Chuỗi tháng liên tiếp tính tới tháng có giao dịch gần nhất. */
+  current: number;
+  /** Số lần mua trong tháng hiện tại. */
+  currentMonthBuys: number;
+  /** Tháng đầu tiên (YYYY-MM) hoặc null. */
+  firstMonth: string | null;
+  /** Tháng gần nhất có giao dịch (YYYY-MM) hoặc null. */
+  latestMonth: string | null;
+}
+
+function monthIndex(key: string): number {
+  const [y, m] = key.split("-").map(Number);
+  return (y ?? 0) * 12 + ((m ?? 1) - 1);
+}
+
+/**
+ * Chuỗi tích lũy theo tháng — tích sản không phải chuyện của ngày nên chuỗi
+ * đếm theo tháng: tháng nào cũng có ít nhất 1 lần mua thì nối chuỗi.
+ */
+export function computeMonthlyStreak(
+  txs: readonly Tx[],
+  now: Date = new Date(),
+): MonthlyStreak {
+  const keys = [...new Set(txs.map((t) => monthKeyOfTx(t)))].sort();
+  const currentKey = monthKeyOf(now);
+  const currentMonthBuys = txs.filter((t) => monthKeyOfTx(t) === currentKey).length;
+  if (keys.length === 0) {
+    return {
+      months: 0,
+      longest: 0,
+      current: 0,
+      currentMonthBuys,
+      firstMonth: null,
+      latestMonth: null,
+    };
+  }
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < keys.length; i++) {
+    run = monthIndex(keys[i] ?? "") - monthIndex(keys[i - 1] ?? "") === 1 ? run + 1 : 1;
+    longest = Math.max(longest, run);
+  }
+  // Chuỗi hiện tại: đếm ngược từ tháng gần nhất có giao dịch.
+  let current = 1;
+  for (let i = keys.length - 1; i > 0; i--) {
+    if (monthIndex(keys[i] ?? "") - monthIndex(keys[i - 1] ?? "") !== 1) break;
+    current += 1;
+  }
+  return {
+    months: keys.length,
+    longest,
+    current,
+    currentMonthBuys,
+    firstMonth: keys[0] ?? null,
+    latestMonth: keys[keys.length - 1] ?? null,
+  };
+}
+
 /**
  * "Đã tích lũy được bao lâu" từ ngày bắt đầu tới hôm nay:
  * "1 năm 3 tháng", "8 tháng", "12 ngày", "Hôm nay".

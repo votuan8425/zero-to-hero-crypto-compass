@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeMonthlyStreak,
   earliestTxDate,
   formatDurationSince,
   groupByMonth,
@@ -70,5 +71,42 @@ describe("earliestTxDate", () => {
   });
   it("không có giao dịch thì null", () => {
     expect(earliestTxDate([])).toBeNull();
+  });
+});
+
+describe("computeMonthlyStreak", () => {
+  const now = new Date(2026, 10, 17); // 17/11/2026
+  it("đếm tháng, chuỗi dài nhất và chuỗi hiện tại theo tháng liên tiếp", () => {
+    const s = computeMonthlyStreak(
+      [tx("2026-09-05"), tx("2026-10-02"), tx("2026-11-01"), tx("2026-11-15")],
+      now,
+    );
+    expect(s.months).toBe(3);
+    expect(s.longest).toBe(3);
+    expect(s.current).toBe(3);
+    expect(s.currentMonthBuys).toBe(2);
+    expect(s.firstMonth).toBe("2026-09");
+    expect(s.latestMonth).toBe("2026-11");
+  });
+  it("tháng bị ngắt thì chuỗi dài nhất và chuỗi hiện tại tách riêng", () => {
+    const s = computeMonthlyStreak(
+      [tx("2026-01-10"), tx("2026-02-10"), tx("2026-05-10"), tx("2026-06-10")],
+      now,
+    );
+    expect(s.months).toBe(4);
+    expect(s.longest).toBe(2);
+    expect(s.current).toBe(2);
+    expect(s.currentMonthBuys).toBe(0);
+  });
+  it("không có giao dịch thì toàn 0", () => {
+    const s = computeMonthlyStreak([], now);
+    expect(s).toEqual({
+      months: 0,
+      longest: 0,
+      current: 0,
+      currentMonthBuys: 0,
+      firstMonth: null,
+      latestMonth: null,
+    });
   });
 });
