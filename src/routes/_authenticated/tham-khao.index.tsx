@@ -316,16 +316,24 @@ function ReferencesPage() {
     staleTime: 60_000,
   });
   const investors = publishedQuery.data ?? [];
-  // Nhà đầu tư đang theo dõi (lưu trên thiết bị) — bấm một nhà đầu tư trong
-  // danh sách là theo dõi + xem danh mục của họ; lần sau mở lại vẫn thấy họ.
+  // Nhà đầu tư đang theo dõi (lưu trên thiết bị) — nút "Theo dõi" chỉ để
+  // ghim, bấm lại để gỡ. Xem danh mục thì KHÔNG cần theo dõi: bấm thẻ nào
+  // là xem danh mục của người đó (selectedId), độc lập với theo dõi.
   const [followedId, setFollowedId] = useState<string | null>(() =>
     readFollowedInvestorId(),
   );
-  const selected = selectPublishedAllocation(investors, followedId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected =
+    (selectedId ? investors.find((a) => a.user_id === selectedId) : undefined) ??
+    selectPublishedAllocation(investors, followedId);
 
-  function followInvestor(userId: string) {
-    setFollowedId(userId);
-    saveFollowedInvestorId(userId);
+  function toggleFollowInvestor(userId: string) {
+    setFollowedId((prev) => {
+      const next = prev === userId ? null : userId;
+      saveFollowedInvestorId(next);
+      return next;
+    });
+    setSelectedId(userId);
   }
   const syncedRef = useRef(false);
   const [deploying, setDeploying] = useState(false);
@@ -480,8 +488,8 @@ function ReferencesPage() {
                 allocation={inv}
                 isSelected={selected?.user_id === inv.user_id}
                 isFollowed={followedId === inv.user_id}
-                onSelect={() => followInvestor(inv.user_id)}
-                onFollow={() => followInvestor(inv.user_id)}
+                onSelect={() => setSelectedId(inv.user_id)}
+                onFollow={() => toggleFollowInvestor(inv.user_id)}
               />
             ))}
           </div>
