@@ -337,6 +337,8 @@ function ReferencesPage() {
   const isPreview = !selected && !!preview;
   // Chỉ admin mới sửa được lời nhắn — và chỉ trên chính danh mục của mình.
   const isOwnCard = admin && card?.user_id === user.id;
+  // Danh mục đã đăng của chính admin (để hiện "đã đăng lúc ..." trong banner).
+  const ownPublished = admin ? (investors.find((a) => a.user_id === user.id) ?? null) : null;
 
   return (
     <div>
@@ -372,8 +374,8 @@ function ReferencesPage() {
       <div className="mb-4 flex gap-2 rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
         <Info className="h-4 w-4 shrink-0" />
         {admin
-          ? published
-            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(published.updated_at)} — người dùng khác chỉ thấy tỷ lệ % từng token, thời gian đã tích lũy và lãi/lỗ % theo vốn. Bấm “Đăng portfolio” để cập nhật lại bất cứ lúc nào.`
+          ? ownPublished
+            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(ownPublished.updated_at)} — người dùng khác chỉ thấy tỷ lệ % từng token, thời gian đã tích lũy và lãi/lỗ % theo vốn. Bấm “Đăng portfolio” để cập nhật lại bất cứ lúc nào.`
             : "Bạn chưa đăng portfolio. Bấm “Đăng portfolio” để công bố tỷ lệ % từng token, thời gian đã tích lũy và lãi/lỗ % theo vốn — không hiển thị số tiền hay số lượng."
           : "Chỉ admin mới được thêm/sửa danh mục tham khảo. Bạn chỉ xem tỷ lệ % danh mục của admin — không thấy số tiền, số lượng hay ghi chú của admin."}
       </div>
