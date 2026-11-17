@@ -72,8 +72,8 @@ function ReferenceDetailPage() {
 
   async function save() {
     if (!ref) return;
-    if (!name.trim()) return toast.error("Vui lòng nhập tên danh mục.");
-    if (!check.ok && !confirmed) return toast.error("Tổng tỷ lệ khác 100%. Hãy sửa hoặc xác nhận trước khi lưu.");
+    if (!name.trim()) { toast.error("Vui lòng nhập tên danh mục."); return; }
+    if (!check.ok && !confirmed) { toast.error("Tổng tỷ lệ khác 100%. Hãy sửa hoặc xác nhận trước khi lưu."); return; }
     setSaving(true);
     try {
       await updateReference(ref.id, { name: name.trim(), description: description.trim() || null, notes: notes.trim() || null, holdings: normalizeHoldings(draft) });

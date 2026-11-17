@@ -239,11 +239,11 @@ function PasswordSection({ email }: { email: string }) {
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (next.length < 6) return toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.");
+    if (next.length < 6) { toast.error("Mật khẩu mới phải có ít nhất 6 ký tự."); return; }
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: next, current_password: current } as { password: string });
     setBusy(false);
-    if (error) return toast.error(translateAuthError(error));
+    if (error) { toast.error(translateAuthError(error)); return; }
     setCurrent(""); setNext("");
     toast.success("Đã đổi mật khẩu.");
   }

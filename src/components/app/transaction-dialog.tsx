@@ -65,11 +65,11 @@ export function TransactionDialog({ open, onOpenChange, existing, defaultCurrenc
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!Number.isFinite(q) || q <= 0) return toast.error("Số lượng phải lớn hơn 0.");
-    if (!Number.isFinite(p) || p < 0) return toast.error("Giá mua không hợp lệ.");
-    if (!Number.isFinite(f) || f < 0) return toast.error("Phí giao dịch không hợp lệ.");
-    if (cur === "VND" && !rate) return toast.error("Chưa có tỷ giá USD/VND. Vui lòng nhập giá bằng USD hoặc thử lại khi có mạng.");
-    if (date > todayKey()) return toast.error("Ngày mua không thể ở tương lai.");
+    if (!Number.isFinite(q) || q <= 0) { toast.error("Số lượng phải lớn hơn 0."); return; }
+    if (!Number.isFinite(p) || p < 0) { toast.error("Giá mua không hợp lệ."); return; }
+    if (!Number.isFinite(f) || f < 0) { toast.error("Phí giao dịch không hợp lệ."); return; }
+    if (cur === "VND" && !rate) { toast.error("Chưa có tỷ giá USD/VND. Vui lòng nhập giá bằng USD hoặc thử lại khi có mạng."); return; }
+    if (date > todayKey()) { toast.error("Ngày mua không thể ở tương lai."); return; }
     setBusy(true);
     try {
       const status = await saveTransaction(qc, user.id, {

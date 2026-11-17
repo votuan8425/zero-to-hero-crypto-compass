@@ -78,8 +78,8 @@ function NewReferencePage() {
   }
 
   async function runAnalysis() {
-    if (!online) return toast.error("Cần kết nối mạng để phân tích bằng AI.");
-    if (!images.length) return toast.error("Hãy chọn ít nhất một ảnh.");
+    if (!online) { toast.error("Cần kết nối mạng để phân tích bằng AI."); return; }
+    if (!images.length) { toast.error("Hãy chọn ít nhất một ảnh."); return; }
     setStage("analyzing");
     try {
       const paths = await ensureUploaded();
