@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BookMarked, GitCompareArrows, Info, MessageSquareQuote, Pencil, Plus, Quote, Rocket } from "lucide-react";
+import { BookMarked, Check, GitCompareArrows, Info, Lock, MessageSquareQuote, Pencil, Plus, Quote, Rocket, Send, UserCheck, UserX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,13 +27,18 @@ import { isAdminUser } from "@/lib/admin";
 import {
   fetchPublishedAllocations,
   publishedAllocationsKey,
-  readFollowedInvestorId,
-  saveFollowedInvestorId,
-  selectPublishedAllocation,
   syncAdminAllocation,
   type AdminAllocation,
 } from "@/lib/admin-allocation";
-import { cn } from "@/lib/utils";
+import {
+  cancelFollow,
+  fetchMyFollowMap,
+  fetchPendingFollowRequests,
+  requestFollow,
+  reviewFollowRequest,
+  type FollowStatus,
+  type InvestorFollow,
+} from "@/lib/investor-follow";
 
 export const Route = createFileRoute("/_authenticated/tham-khao/")({
   head: () => ({
@@ -53,201 +58,203 @@ export const Route = createFileRoute("/_authenticated/tham-khao/")({
 });
 
 /**
- * Portfolio đã đăng của Admin — chỉ % từng token, thời gian đã tích lũy và
- * lãi/lỗ % theo vốn. Không bao giờ hiển thị số tiền, số lượng hay ngày mua
- * cụ thể của admin.
+ * MỘT thẻ duy nhất cho một nhà đầu tư đã đăng — gộp cả xem trước và danh
+ * mục đầy đủ vào cùng một thẻ, không còn 2 thẻ trùng nhau (thẻ mini + thẻ
+ * chi tiết) như trước.
+ *
+ * Chart (thống kê + biểu đồ tròn + tỷ lệ từng token + lời nhắn) CHỈ hiện khi
+ * người xem là chính admin đó hoặc đã được admin duyệt theo dõi. Chưa được
+ * duyệt thì chỉ thấy tên + cập nhật lúc nào, và nút gửi yêu cầu theo dõi.
+ * Không bao giờ hiển thị số tiền, số lượng hay ngày mua cụ thể của admin.
  */
-function AdminAllocationCard({
+function InvestorPortfolioCard({
   allocation,
   preview,
+  isOwn,
+  followStatus,
   isAdmin,
   onEditMessage,
+  onRequestFollow,
+  onCancelFollow,
+  busy,
 }: {
   allocation: AdminAllocation;
   preview?: boolean;
+  isOwn?: boolean;
+  followStatus?: FollowStatus | null;
   isAdmin?: boolean;
   onEditMessage?: () => void;
+  onRequestFollow?: () => void;
+  onCancelFollow?: () => void;
+  busy?: boolean;
 }) {
   const pnl = allocation.pnlPct;
+  // Chính admin hoặc đã được duyệt mới được xem chart.
+  const canView = !!isOwn || followStatus === "approved";
   return (
-    <section className="panel hero-glow relative mb-5 overflow-hidden p-5">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">Danh mục của Admin</h2>
-        <span className="text-xs text-muted-foreground">
-          {preview ? "Xem trước — chưa đăng" : `Cập nhật: ${formatDateTime(allocation.updated_at)}`}
-        </span>
-      </div>
-
-      <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-surface-raised px-2 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Đã tích lũy
-          </div>
-          <div className="num mt-1 text-base font-bold leading-tight md:text-lg">
-            {allocation.startedAt ? formatDurationSince(allocation.startedAt) : "—"}
-          </div>
-        </div>
-        <div className="rounded-xl bg-surface-raised px-2 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Lãi / Lỗ theo vốn
-          </div>
-          <PnlText value={pnl} className="num mt-1 block text-base font-bold leading-tight md:text-lg">
-            {pnl != null ? `${pnl >= 0 ? "+" : ""}${formatNumber(pnl, 1)}%` : "—"}
-          </PnlText>
-        </div>
-        <div className="rounded-xl bg-surface-raised px-2 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Số loại token
-          </div>
-          <div className="num mt-1 text-base font-bold leading-tight md:text-lg">
-            {allocation.slices.length}
-          </div>
-        </div>
-      </div>
-
-      <p className="mb-4 text-sm text-muted-foreground">
-        Chỉ tỷ lệ % vốn nắm giữ từng token — không phải khuyến nghị đầu tư.
-      </p>
-      <DonutChart
-        items={allocation.slices}
-        centerLabel="token"
-        centerValue={String(allocation.slices.length)}
-      />
-      {allocation.message ? (
-        <figure className="relative mt-5 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-surface to-surface p-5">
-          <Quote
-            className="pointer-events-none absolute -right-3 -top-3 h-24 w-24 text-primary/10"
-            aria-hidden
-          />
-          <figcaption className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
-            <MessageSquareQuote className="h-4 w-4" /> Lời nhắn của nhà đầu tư
-          </figcaption>
-          <blockquote className="mt-3 whitespace-pre-wrap text-[15px] font-medium leading-relaxed">
-            {allocation.message}
-          </blockquote>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="lime-gradient grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black text-primary-foreground">
-              A
+    <section className="panel hero-glow relative overflow-hidden p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className="lime-gradient grid h-10 w-10 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
+            A
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold leading-tight">Danh mục của Admin</h2>
+            <span className="text-xs text-muted-foreground">
+              {preview
+                ? "Xem trước — chưa đăng"
+                : `Cập nhật: ${formatDateTime(allocation.updated_at)}`}
             </span>
-            <span className="font-medium text-foreground">Admin</span>
-            {allocation.messageUpdatedAt && (
-              <>
-                <span aria-hidden>·</span>
-                <span>Cập nhật {formatDateTime(allocation.messageUpdatedAt)}</span>
-              </>
-            )}
-            {isAdmin && onEditMessage && (
+          </div>
+        </div>
+        {pnl != null && (
+          <PnlText value={pnl} className="num shrink-0 text-base font-bold">
+            {pnl >= 0 ? "+" : ""}
+            {formatNumber(pnl, 1)}%
+          </PnlText>
+        )}
+      </div>
+
+      {canView ? (
+        <>
+          <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-surface-raised px-2 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Đã tích lũy
+              </div>
+              <div className="num mt-1 text-base font-bold leading-tight md:text-lg">
+                {allocation.startedAt ? formatDurationSince(allocation.startedAt) : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl bg-surface-raised px-2 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Lãi / Lỗ theo vốn
+              </div>
+              <PnlText value={pnl} className="num mt-1 block text-base font-bold leading-tight md:text-lg">
+                {pnl != null ? `${pnl >= 0 ? "+" : ""}${formatNumber(pnl, 1)}%` : "—"}
+              </PnlText>
+            </div>
+            <div className="rounded-xl bg-surface-raised px-2 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Số loại token
+              </div>
+              <div className="num mt-1 text-base font-bold leading-tight md:text-lg">
+                {allocation.slices.length}
+              </div>
+            </div>
+          </div>
+
+          <p className="mb-4 text-sm text-muted-foreground">
+            Chỉ tỷ lệ % vốn nắm giữ từng token — không phải khuyến nghị đầu tư.
+          </p>
+          <DonutChart
+            items={allocation.slices}
+            centerLabel="token"
+            centerValue={String(allocation.slices.length)}
+          />
+          {allocation.message ? (
+            <figure className="relative mt-5 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-surface to-surface p-5">
+              <Quote
+                className="pointer-events-none absolute -right-3 -top-3 h-24 w-24 text-primary/10"
+                aria-hidden
+              />
+              <figcaption className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                <MessageSquareQuote className="h-4 w-4" /> Lời nhắn của nhà đầu tư
+              </figcaption>
+              <blockquote className="mt-3 whitespace-pre-wrap text-[15px] font-medium leading-relaxed">
+                {allocation.message}
+              </blockquote>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="lime-gradient grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black text-primary-foreground">
+                  A
+                </span>
+                <span className="font-medium text-foreground">Admin</span>
+                {allocation.messageUpdatedAt && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>Cập nhật {formatDateTime(allocation.messageUpdatedAt)}</span>
+                  </>
+                )}
+                {isAdmin && onEditMessage && (
+                  <button
+                    type="button"
+                    onClick={onEditMessage}
+                    className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Sửa
+                  </button>
+                )}
+              </div>
+            </figure>
+          ) : (
+            isAdmin &&
+            onEditMessage && (
               <button
                 type="button"
                 onClick={onEditMessage}
-                className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
               >
-                <Pencil className="h-3.5 w-3.5" /> Sửa
+                <MessageSquareQuote className="h-4 w-4" /> Thêm lời nhắn của nhà đầu tư
               </button>
-            )}
-          </div>
-        </figure>
+            )
+          )}
+          {followStatus === "approved" && !isOwn && onCancelFollow && (
+            <button
+              type="button"
+              onClick={onCancelFollow}
+              disabled={busy}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-surface-raised px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <UserX className="h-3.5 w-3.5" /> Ngừng theo dõi
+            </button>
+          )}
+        </>
       ) : (
-        isAdmin &&
-        onEditMessage && (
-          <button
-            type="button"
-            onClick={onEditMessage}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-          >
-            <MessageSquareQuote className="h-4 w-4" /> Thêm lời nhắn của nhà đầu tư
-          </button>
-        )
+        <div className="rounded-2xl border border-dashed border-border p-5 text-center">
+          <Lock className="mx-auto h-6 w-6 text-muted-foreground" aria-hidden />
+          <p className="mt-3 text-sm font-medium">
+            Biểu đồ danh mục chỉ hiện sau khi admin duyệt theo dõi.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Gửi yêu cầu theo dõi — admin duyệt thì bạn mới xem được tỷ lệ % từng token.
+          </p>
+          {followStatus === "pending" ? (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                <Send className="h-3.5 w-3.5" /> Đang chờ admin duyệt
+              </span>
+              {onCancelFollow && (
+                <button
+                  type="button"
+                  onClick={onCancelFollow}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" /> Hủy yêu cầu
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4">
+              {followStatus === "rejected" && (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Yêu cầu trước đã bị từ chối — bạn có thể gửi lại.
+                </p>
+              )}
+              {onRequestFollow && (
+                <Button variant="hero" onClick={onRequestFollow} disabled={busy}>
+                  <Send /> {busy ? "Đang gửi…" : "Gửi yêu cầu theo dõi"}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
 }
 
 const MESSAGE_MAX = 500;
-
-/**
- * Thẻ xem trước một nhà đầu tư đã đăng — hiện luôn cho mọi người xem,
- * KHÔNG cần bấm theo dõi trước. Bấm vào thẻ để xem danh mục đầy đủ
- * (biểu đồ tròn, thống kê, lời nhắn) ở phía dưới. Nút "Theo dõi" chỉ để
- * ghim nhà đầu tư yêu thích, không phải điều kiện để xem.
- */
-function InvestorCard({
-  allocation,
-  isSelected,
-  isFollowed,
-  onSelect,
-  onFollow,
-}: {
-  allocation: AdminAllocation;
-  isSelected: boolean;
-  isFollowed: boolean;
-  onSelect: () => void;
-  onFollow: () => void;
-}) {
-  const top = [...allocation.slices]
-    .sort((a, b) => b.percent - a.percent)
-    .slice(0, 3);
-  return (
-    <article
-      onClick={onSelect}
-      className={cn(
-        "panel group cursor-pointer p-4 transition-colors hover:border-primary/50",
-        isSelected && "border-primary/60 ring-1 ring-primary/40",
-      )}
-    >
-      <div className="flex items-center gap-3">
-        <span className="lime-gradient grid h-10 w-10 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
-          A
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">Admin</span>
-          <span className="block text-xs text-muted-foreground">
-            Cập nhật {formatDateTime(allocation.updated_at)}
-          </span>
-        </span>
-        {allocation.pnlPct != null && (
-          <PnlText value={allocation.pnlPct} className="num shrink-0 text-sm font-semibold">
-            {allocation.pnlPct >= 0 ? "+" : ""}
-            {formatNumber(allocation.pnlPct, 1)}%
-          </PnlText>
-        )}
-      </div>
-      <div className="mt-3">
-        <DonutChart items={allocation.slices} showLegend={false} height={120} />
-      </div>
-      <ul className="mt-3 space-y-1.5">
-        {top.map((s) => (
-          <li key={s.symbol} className="flex items-center gap-2 text-sm">
-            <CoinLogo symbol={s.symbol} size={18} />
-            <span className="flex-1">{displaySymbol(s.symbol)}</span>
-            <span className="num text-muted-foreground">{formatPercent(s.percent)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
-        <span className="text-xs text-muted-foreground">
-          {allocation.slices.length} token
-        </span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onFollow();
-          }}
-          aria-pressed={isFollowed}
-          className={cn(
-            "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-            isFollowed
-              ? "bg-primary text-primary-foreground"
-              : "bg-surface-raised text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {isFollowed ? "Đang theo dõi" : "Theo dõi"}
-        </button>
-      </div>
-    </article>
-  );
-}
 
 /** Dialog để admin viết/sửa lời nhắn của nhà đầu tư (để trống để gỡ). */
 function AdminMessageDialog({
@@ -316,25 +323,73 @@ function ReferencesPage() {
     staleTime: 60_000,
   });
   const investors = publishedQuery.data ?? [];
-  // Nhà đầu tư đang theo dõi (lưu trên thiết bị) — nút "Theo dõi" chỉ để
-  // ghim, bấm lại để gỡ. Xem danh mục thì KHÔNG cần theo dõi: bấm thẻ nào
-  // là xem danh mục của người đó (selectedId), độc lập với theo dõi.
-  const [followedId, setFollowedId] = useState<string | null>(() =>
-    readFollowedInvestorId(),
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected =
-    (selectedId ? investors.find((a) => a.user_id === selectedId) : undefined) ??
-    selectPublishedAllocation(investors, followedId);
+  // Trạng thái theo dõi của mình đối với từng nhà đầu tư (map investor_id ->
+  // 'pending' | 'approved' | 'rejected'; không có key = chưa gửi yêu cầu).
+  // Chart chỉ hiện khi đã được duyệt (hoặc là chính admin đó).
+  const followQuery = useQuery({
+    queryKey: ["my-investor-follows"],
+    queryFn: fetchMyFollowMap,
+    staleTime: 30_000,
+  });
+  const followMap = followQuery.data ?? {};
+  const [followBusy, setFollowBusy] = useState<string | null>(null);
 
-  function toggleFollowInvestor(userId: string) {
-    setFollowedId((prev) => {
-      const next = prev === userId ? null : userId;
-      saveFollowedInvestorId(next);
-      return next;
-    });
-    setSelectedId(userId);
+  async function sendFollowRequest(investorId: string) {
+    if (followBusy) return;
+    setFollowBusy(investorId);
+    try {
+      await requestFollow(investorId);
+      await qc.invalidateQueries({ queryKey: ["my-investor-follows"] });
+      toast.success("Đã gửi yêu cầu theo dõi — chờ admin duyệt.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Không gửi được yêu cầu. Vui lòng thử lại.");
+    } finally {
+      setFollowBusy(null);
+    }
   }
+
+  async function cancelFollowRequest(investorId: string) {
+    if (followBusy) return;
+    setFollowBusy(investorId);
+    try {
+      await cancelFollow(investorId);
+      await qc.invalidateQueries({ queryKey: ["my-investor-follows"] });
+      toast.success("Đã hủy yêu cầu / ngừng theo dõi.");
+    } catch {
+      toast.error("Không hủy được. Vui lòng thử lại.");
+    } finally {
+      setFollowBusy(null);
+    }
+  }
+
+  // Admin: yêu cầu theo dõi đang chờ mình duyệt.
+  const pendingQuery = useQuery({
+    queryKey: ["pending-follow-requests", user.id],
+    queryFn: () => fetchPendingFollowRequests(user.id),
+    enabled: admin,
+    staleTime: 30_000,
+  });
+  const pendingRequests = pendingQuery.data ?? [];
+  const [reviewBusy, setReviewBusy] = useState<string | null>(null);
+
+  async function reviewRequest(req: InvestorFollow, decision: "approved" | "rejected") {
+    if (reviewBusy) return;
+    setReviewBusy(req.id);
+    try {
+      await reviewFollowRequest(req.id, decision);
+      await qc.invalidateQueries({ queryKey: ["pending-follow-requests", user.id] });
+      toast.success(
+        decision === "approved"
+          ? `Đã duyệt ${req.follower_name ?? "người dùng"} — họ xem được danh mục của bạn.`
+          : `Đã từ chối yêu cầu của ${req.follower_name ?? "người dùng"}.`,
+      );
+    } catch {
+      toast.error("Không xử lý được yêu cầu. Vui lòng thử lại.");
+    } finally {
+      setReviewBusy(null);
+    }
+  }
+
   const syncedRef = useRef(false);
   const [deploying, setDeploying] = useState(false);
 
@@ -424,11 +479,8 @@ function ReferencesPage() {
     }
   }
 
-  const card = selected ?? preview;
   // Xem trước khi admin chưa đăng (không có trong danh sách đã đăng).
-  const isPreview = !selected && !!preview;
-  // Chỉ admin mới sửa được lời nhắn — và chỉ trên chính danh mục của mình.
-  const isOwnCard = admin && card?.user_id === user.id;
+  const previewCard = !investors.some((a) => a.user_id === user.id) ? preview : null;
   // Danh mục đã đăng của chính admin (để hiện "đã đăng lúc ..." trong banner).
   const ownPublished = admin ? (investors.find((a) => a.user_id === user.id) ?? null) : null;
 
@@ -438,8 +490,8 @@ function ReferencesPage() {
         title="Tham khảo"
         subtitle={
           admin
-            ? "Chỉ bạn (admin) mới thêm/sửa được. Bấm “Đăng portfolio” để công bố danh mục của bạn cho mọi người dùng."
-            : "Danh mục tham khảo của Admin — chỉ xem tỷ lệ %, không phải khuyến nghị đầu tư."
+            ? "Chỉ bạn (admin) mới thêm/sửa được. Bấm “Đăng portfolio” để công bố danh mục của bạn; người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
+            : "Danh mục tham khảo của Admin — gửi yêu cầu theo dõi, admin duyệt thì mới xem được biểu đồ tỷ lệ %."
         }
         action={
           admin ? (
@@ -467,54 +519,111 @@ function ReferencesPage() {
         <Info className="h-4 w-4 shrink-0" />
         {admin
           ? ownPublished
-            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(ownPublished.updated_at)} — người dùng khác chỉ thấy tỷ lệ % từng token, thời gian đã tích lũy và lãi/lỗ % theo vốn. Bấm “Đăng portfolio” để cập nhật lại bất cứ lúc nào.`
-            : "Bạn chưa đăng portfolio. Bấm “Đăng portfolio” để công bố tỷ lệ % từng token, thời gian đã tích lũy và lãi/lỗ % theo vốn — không hiển thị số tiền hay số lượng."
-          : "Chỉ admin mới được thêm/sửa danh mục tham khảo. Bạn chỉ xem tỷ lệ % danh mục của admin — không thấy số tiền, số lượng hay ghi chú của admin."}
+            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(ownPublished.updated_at)} — chỉ người được bạn duyệt theo dõi mới xem được biểu đồ tỷ lệ %; người khác chỉ thấy tên và phải gửi yêu cầu. Bấm “Đăng portfolio” để cập nhật lại bất cứ lúc nào.`
+            : "Bạn chưa đăng portfolio. Bấm “Đăng portfolio” để công bố danh mục — người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
+          : "Biểu đồ danh mục chỉ hiện sau khi admin duyệt yêu cầu theo dõi của bạn. Gửi yêu cầu trên thẻ nhà đầu tư rồi chờ duyệt."}
       </div>
 
-      {/* Danh sách nhà đầu tư đã đăng — hiện tất cả dưới dạng lưới thẻ, mỗi
-          thẻ là một bản xem trước danh mục (biểu đồ tròn + top token + lãi/lỗ).
-          Xem được ngay, không cần theo dõi trước; bấm một thẻ để xem danh mục
-          đầy đủ của nhà đầu tư đó ở phía dưới. Nút "Theo dõi" chỉ để ghim. */}
-      {investors.length > 0 && (
-        <section className="mb-5">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider">
-            Nhà đầu tư · {investors.length}
+      {/* Yêu cầu theo dõi đang chờ admin duyệt. */}
+      {admin && pendingRequests.length > 0 && (
+        <section className="panel mb-5 border-primary/40 p-4">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <UserCheck className="h-4 w-4 text-primary" />
+            Yêu cầu theo dõi đang chờ duyệt · {pendingRequests.length}
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {investors.map((inv) => (
-              <InvestorCard
-                key={inv.user_id}
-                allocation={inv}
-                isSelected={selected?.user_id === inv.user_id}
-                isFollowed={followedId === inv.user_id}
-                onSelect={() => setSelectedId(inv.user_id)}
-                onFollow={() => toggleFollowInvestor(inv.user_id)}
-              />
+          <p className="mb-3 text-xs text-muted-foreground">
+            Duyệt thì người đó xem được biểu đồ danh mục của bạn; từ chối thì họ có thể gửi lại sau.
+          </p>
+          <ul className="space-y-2">
+            {pendingRequests.map((req) => (
+              <li
+                key={req.id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3"
+              >
+                <span className="lime-gradient grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
+                  {(req.follower_name ?? "?").trim().charAt(0).toUpperCase() || "?"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">
+                    {req.follower_name ?? "Người dùng"}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Gửi lúc {formatDateTime(req.created_at)}
+                  </span>
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    disabled={reviewBusy === req.id}
+                    onClick={() => void reviewRequest(req, "approved")}
+                  >
+                    <Check /> Duyệt
+                  </Button>
+                  <Button
+                    variant="surface"
+                    size="sm"
+                    disabled={reviewBusy === req.id}
+                    onClick={() => void reviewRequest(req, "rejected")}
+                  >
+                    <X /> Từ chối
+                  </Button>
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       )}
 
-      {publishedQuery.isLoading ? (
+      {/* Mỗi nhà đầu tư MỘT thẻ duy nhất (đã gộp xem trước + danh mục đầy đủ).
+          Chart chỉ hiện khi là chính admin đó hoặc đã được duyệt theo dõi. */}
+      {publishedQuery.isLoading || followQuery.isLoading ? (
         <Skeleton className="mb-5 h-56" />
-      ) : card && card.slices.length > 0 ? (
-        <AdminAllocationCard
-          allocation={card}
-          preview={isPreview}
-          isAdmin={isOwnCard}
-          onEditMessage={isOwnCard ? () => setMessageDialogOpen(true) : undefined}
-        />
-      ) : (
+      ) : investors.length === 0 && !previewCard ? (
         <div className="panel mb-5 p-5 text-sm text-muted-foreground">
           Admin chưa công bố danh mục tham khảo.
+        </div>
+      ) : (
+        <div className="mb-5 grid gap-4 lg:grid-cols-2">
+          {investors.map((inv) => {
+            const isOwn = admin && inv.user_id === user.id;
+            return (
+              <InvestorPortfolioCard
+                key={inv.user_id}
+                allocation={inv}
+                isOwn={isOwn}
+                followStatus={isOwn ? "approved" : (followMap[inv.user_id] ?? null)}
+                isAdmin={isOwn}
+                onEditMessage={isOwn ? () => setMessageDialogOpen(true) : undefined}
+                onRequestFollow={
+                  isOwn ? undefined : () => void sendFollowRequest(inv.user_id)
+                }
+                onCancelFollow={
+                  isOwn ? undefined : () => void cancelFollowRequest(inv.user_id)
+                }
+                busy={followBusy === inv.user_id}
+              />
+            );
+          })}
+          {previewCard && (
+            <InvestorPortfolioCard
+              allocation={previewCard}
+              preview
+              isOwn
+              followStatus="approved"
+              isAdmin
+              onEditMessage={() => setMessageDialogOpen(true)}
+            />
+          )}
         </div>
       )}
 
       <AdminMessageDialog
         open={messageDialogOpen}
         onOpenChange={setMessageDialogOpen}
-        initial={card?.message ?? ""}
+        initial={
+          (investors.find((a) => a.user_id === user.id) ?? previewCard)?.message ?? ""
+        }
         saving={savingMessage}
         onSave={(message) => void saveMessage(message)}
       />
