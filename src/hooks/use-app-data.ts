@@ -24,22 +24,27 @@ export function usePrices(symbols: string[]) {
     queryKey: ["prices", ...key],
     queryFn: async (): Promise<PricesResult> => {
       const cached = readPriceCache();
+      const stale = (c: PricesResult): PricesResult => ({
+        ...c,
+        error: "Đang dùng giá đã lưu gần nhất (chưa tải được giá mới).",
+      });
+      let res: PricesResult;
       try {
-        const res = await getPrices({ data: { symbols: key } });
-        if (res.error) throw new Error(res.error);
-        const merged: PricesResult = {
+        res = await getPrices({ data: { symbols: key } });
+      } catch (e) {
+        if (cached) return stale(cached);
+        throw e;
+      }
+      if (res.error) return cached ? stale(cached) : res;
+      localStorage.setItem(
+        PRICE_CACHE,
+        JSON.stringify({
           ...res,
           prices: { ...(cached?.prices ?? {}), ...res.prices },
           usdVnd: res.usdVnd ?? cached?.usdVnd ?? null,
-        };
-        localStorage.setItem(PRICE_CACHE, JSON.stringify(merged));
-        return res;
-      } catch (e) {
-        if (cached) {
-          return { ...cached, error: "Đang dùng giá đã lưu gần nhất (không tải được giá mới)." };
-        }
-        throw e;
-      }
+        }),
+      );
+      return res;
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
