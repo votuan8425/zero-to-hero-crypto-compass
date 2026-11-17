@@ -231,6 +231,15 @@ export const profileKey = (userId: string) => ["profile", userId] as const;
 export const profileQuery = (userId: string) =>
   queryOptions({
     queryKey: profileKey(userId),
+    // Hồ sơ đã lưu lần trước (kể cả tiền tệ) làm dữ liệu ban đầu, để khi quay
+    // lại Trang chủ sau khi chuyển tab / tải lại trang, giao diện hiện đúng
+    // tiền tệ (USDT/KRW) ngay từ khung hình đầu, thay vì hiện tạm VND trong
+    // lúc chờ tải hồ sơ rồi mới đổi lại. Dữ liệu thật vẫn được tải lại ngay
+    // (staleTime mặc định 0) để đồng bộ nếu đổi ở thiết bị khác.
+    initialData: () => {
+      const snap = readSnapshot<Profile>("profile", userId);
+      return snap ? { ...snap, currency: normalizeCurrency(snap.currency) } : undefined;
+    },
     queryFn: async (): Promise<Profile> => {
       try {
         const { data, error } = await supabase

@@ -102,8 +102,8 @@ function PersonalPage() {
   const txs = useTransactions();
   const refs = useReferences();
   const sync = useSync();
-  const [name, setName] = useState("");
-  const [currency, setCurrency] = useState<Currency>("VND");
+  const [name, setName] = useState(() => profile?.display_name ?? "");
+  const [currency, setCurrency] = useState<Currency>(() => profile?.currency ?? "VND");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {

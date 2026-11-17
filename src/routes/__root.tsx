@@ -8,14 +8,18 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SplashScreen } from "@/components/app/splash-screen";
 import { supabase } from "@/integrations/supabase/client";
+import { isNetworkError, profileQuery, transactionsQuery } from "@/lib/data";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function NotFoundComponent() {
   return (
@@ -138,6 +142,12 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  // Màn hình chờ lúc mở app (dù đã đăng nhập hay chưa): logo + vòng xoay tròn,
+  // hiện ít nhất 2 giây trong lúc dữ liệu của tài khoản đang được tải, rồi mới
+  // vào app. Chỉ chạy khi tải lại trang / mở app (component này chỉ mount một
+  // lần), không hiện lại khi chuyển tab trong app. Dù tải dữ liệu có lỗi thì
+  // vẫn vào app sau 2 giây — trang trong tự hiện trạng thái tải/lỗi của nó.
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -148,11 +158,46 @@ function RootComponent() {
     return () => data.subscription.unsubscribe();
   }, [router, queryClient]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const boot = async () => {
+      const minWait = sleep(2000);
+      try {
+        let userId: string | null = null;
+        const { data, error } = await supabase.auth.getUser();
+        if (data.user) {
+          userId = data.user.id;
+        } else if (error && isNetworkError(error)) {
+          const { data: s } = await supabase.auth.getSession();
+          if (s.session) userId = s.session.user.id;
+        }
+        if (userId) {
+          await Promise.race([
+            Promise.allSettled([
+              queryClient.prefetchQuery(transactionsQuery(userId)),
+              queryClient.prefetchQuery(profileQuery(userId)),
+            ]),
+            sleep(8000),
+          ]);
+        }
+      } catch {
+        // Lỗi lúc tải dữ liệu thì vẫn vào app sau 2 giây.
+      } finally {
+        await minWait;
+        if (!cancelled) setBooted(true);
+      }
+    };
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        {booted ? <Outlet /> : <SplashScreen />}
         <Toaster position="top-center" richColors theme="dark" />
       </TooltipProvider>
     </QueryClientProvider>
