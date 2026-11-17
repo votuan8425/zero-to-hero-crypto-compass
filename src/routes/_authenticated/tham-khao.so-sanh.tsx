@@ -84,8 +84,8 @@ function ComparePage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {rows.map((r) => (
-                      <tr key={String(r.symbol)}>
-                        <td className="px-4 py-3"><span className="flex items-center gap-2"><CoinLogo symbol={String(r.symbol)} size={22} /><b>{displaySymbol(String(r.symbol))}</b></span></td>
+                      <tr key={String(r["symbol"])}>
+                        <td className="px-4 py-3"><span className="flex items-center gap-2"><CoinLogo symbol={String(r["symbol"])} size={22} /><b>{displaySymbol(String(r["symbol"]))}</b></span></td>
                         {chosen.map((c, i) => <td key={c.id} className="num px-4 py-3 text-right">{Number(r[`p${i}`]) ? formatPercent(Number(r[`p${i}`])) : <span className="text-muted-foreground">—</span>}</td>)}
                       </tr>
                     ))}

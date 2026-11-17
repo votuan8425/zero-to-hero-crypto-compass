@@ -67,7 +67,7 @@ export async function extractPortfolio(images: { dataUrl: string }[], apiKey: st
       },
     ],
     output: Output.object({ schema: extractionSchema }),
-    abortSignal: signal,
+    ...(signal ? { abortSignal: signal } : {}),
     providerOptions: {
       openai: {
         forceReasoning: true,

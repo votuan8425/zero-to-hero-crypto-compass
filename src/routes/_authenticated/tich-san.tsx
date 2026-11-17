@@ -22,7 +22,7 @@ import { formatDate, formatMoney, formatNumber, parseDateOnly, toDateKey } from 
 import { displaySymbol } from "@/lib/coins";
 
 export const Route = createFileRoute("/_authenticated/tich-san")({
-  validateSearch: (s: Record<string, unknown>): { add?: boolean } => (s.add === true || s.add === "true" ? { add: true } : {}),
+  validateSearch: (s: Record<string, unknown>): { add?: boolean } => (s["add"] === true || s["add"] === "true" ? { add: true } : {}),
   head: () => ({
     meta: [
       { title: "Tích sản — ZERO TO HERO" },

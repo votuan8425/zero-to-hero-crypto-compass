@@ -10,7 +10,7 @@ export interface CompareSeries {
 
 /** Grouped bar chart of allocation % per coin across several portfolios. */
 export function CompareChart({ rows, series }: { rows: Record<string, number | string>[]; series: CompareSeries[] }) {
-  const data = rows.map((r) => ({ ...r, symbolLabel: displaySymbol(String(r.symbol)) }));
+  const data = rows.map((r) => ({ ...r, symbolLabel: displaySymbol(String(r["symbol"])) }));
   return (
     <div style={{ height: Math.max(240, 0) }} className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">

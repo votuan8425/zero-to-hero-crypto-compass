@@ -25,7 +25,8 @@ export function DonutChart({ items, centerLabel, centerValue, showLegend = true,
               cursor={false}
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
-                const p = payload[0].payload as DonutItem;
+                const p = payload[0]?.payload as DonutItem | undefined;
+                if (!p) return null;
                 return (
                   <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
                     <div className="font-semibold">{coinName(p.symbol, p.name)} ({displaySymbol(p.symbol)})</div>

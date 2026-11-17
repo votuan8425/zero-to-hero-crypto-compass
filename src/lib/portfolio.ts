@@ -121,7 +121,7 @@ export function computeStreak(dates: string[], today: Date = new Date()): Streak
   let longest = 1;
   let run = 1;
   for (let i = 1; i < sorted.length; i++) {
-    const prev = parseDateOnly(sorted[i - 1]);
+    const prev = parseDateOnly(sorted[i - 1] ?? "");
     const expected = toDateKey(addDays(prev, 1));
     run = sorted[i] === expected ? run + 1 : 1;
     longest = Math.max(longest, run);
@@ -134,5 +134,5 @@ export function computeStreak(dates: string[], today: Date = new Date()): Streak
     current += 1;
     cursor = addDays(cursor, -1);
   }
-  return { current, longest, activeDays: keys.size, lastDate: sorted[sorted.length - 1], boughtToday };
+  return { current, longest, activeDays: keys.size, lastDate: sorted[sorted.length - 1] ?? null, boughtToday };
 }

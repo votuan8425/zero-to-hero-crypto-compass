@@ -23,7 +23,7 @@ export function HoldingsEditor({ holdings, onChange }: { holdings: RefHolding[];
 
   function assignRemainderToOther() {
     const others = holdings.findIndex((h) => normalizeSymbol(h.symbol) === OTHER_SYMBOL);
-    if (others >= 0) update(others, { percent: Math.round(((holdings[others].percent ?? 0) + check.diff) * 100) / 100, percent_source: "edited" });
+    if (others >= 0) update(others, { percent: Math.round(((holdings[others]?.percent ?? 0) + check.diff) * 100) / 100, percent_source: "edited" });
     else onChange([...holdings, { ...emptyHolding(OTHER_SYMBOL), percent: check.diff }]);
   }
   function normalizeTo100() {

@@ -10,9 +10,9 @@ const h = (p: Partial<RefHolding>): RefHolding => ({ symbol: "BTC", name: null, 
 describe("portfolio math", () => {
   it("averages cost across DCA purchases including fees", () => {
     const [btc] = computeHoldings([tx({ quantity: 1, price_usd: 100, fee_usd: 2 }), tx({ quantity: 1, price_usd: 200 })]);
-    expect(btc.quantity).toBe(2);
-    expect(btc.investedUsd).toBe(302);
-    expect(btc.avgCostUsd).toBe(151);
+    expect(btc?.quantity).toBe(2);
+    expect(btc?.investedUsd).toBe(302);
+    expect(btc?.avgCostUsd).toBe(151);
   });
 
   it("computes profit/loss from live price", () => {
@@ -54,7 +54,7 @@ describe("reference portfolios", () => {
   it("only fills missing percentages when every value is visible, marking them as estimated", () => {
     const filled = fillPercentFromValues([h({ value: 750 }), h({ symbol: "ETH", value: 250 })]);
     expect(filled.map((x) => x.percent)).toEqual([75, 25]);
-    expect(filled[0].percent_source).toBe("computed");
+    expect(filled[0]?.percent_source).toBe("computed");
     const untouched = fillPercentFromValues([h({ value: 750 }), h({ symbol: "ETH", value: null })]);
     expect(untouched.every((x) => x.percent === null)).toBe(true);
   });
@@ -75,7 +75,7 @@ describe("offline sync", () => {
     q = coalesce(q, { kind: "upsert", id: "a", row, queuedAt: 1, baseUpdatedAt: null });
     q = coalesce(q, { kind: "upsert", id: "a", row: { ...row, quantity: 2 }, queuedAt: 2, baseUpdatedAt: null });
     expect(q).toHaveLength(1);
-    expect(applyPending([], q)[0].quantity).toBe(2);
+    expect(applyPending([], q)[0]?.quantity).toBe(2);
   });
   it("drops a purchase created and deleted while offline", () => {
     let q: PendingOp[] = [{ kind: "upsert", id: "a", row, queuedAt: 1, baseUpdatedAt: null }];

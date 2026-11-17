@@ -1,6 +1,6 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 import { applyPending, decideConflict, enqueue, readQueue, writeQueue, type PendingOp } from "./offline-queue";
 import type { Tx } from "./portfolio";
 import type { RefHolding } from "./reference";
@@ -45,12 +45,11 @@ export function isNetworkError(e: unknown): boolean {
   return /failed to fetch|networkerror|network request failed|load failed|fetch failed/i.test(msg);
 }
 
-function normalizeTx(r: Record<string, unknown>): Tx {
+function normalizeTx(r: Tables<"transactions">): Tx {
   return {
-    id: String(r.id), symbol: String(r.symbol), coin_name: String(r.coin_name),
+    id: r.id, symbol: r.symbol, coin_name: r.coin_name,
     quantity: Number(r.quantity), price_usd: Number(r.price_usd), fee_usd: Number(r.fee_usd ?? 0),
-    tx_date: String(r.tx_date), note: (r.note as string | null) ?? null,
-    updated_at: r.updated_at as string | undefined, created_at: r.created_at as string | undefined,
+    tx_date: r.tx_date, note: r.note ?? null, updated_at: r.updated_at, created_at: r.created_at,
   };
 }
 
@@ -66,7 +65,7 @@ export const transactionsQuery = (userId: string) =>
       try {
         const { data, error } = await supabase.from("transactions").select("*").order("tx_date", { ascending: false }).order("created_at", { ascending: false }).limit(5000);
         if (error) throw error;
-        rows = (data ?? []).map((r) => normalizeTx(r as Record<string, unknown>));
+        rows = (data ?? []).map(normalizeTx);
         saveSnapshot("tx", userId, rows);
       } catch (e) {
         const snap = readSnapshot<Tx[]>("tx", userId);
@@ -192,12 +191,12 @@ export async function updateProfile(userId: string, patch: Partial<Pick<Profile,
 
 export const refsKey = (userId: string) => ["references", userId] as const;
 
-function normalizeRef(r: Record<string, unknown>): ReferencePortfolio {
+function normalizeRef(r: Tables<"reference_portfolios">): ReferencePortfolio {
   return {
-    id: String(r.id), name: String(r.name), description: (r.description as string) ?? null, notes: (r.notes as string) ?? null,
-    image_paths: (r.image_paths as string[]) ?? [], holdings: (r.holdings as unknown as RefHolding[]) ?? [],
-    total_value: r.total_value != null ? Number(r.total_value) : null, total_value_currency: (r.total_value_currency as string) ?? null,
-    ai_summary: (r.ai_summary as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
+    id: r.id, name: r.name, description: r.description ?? null, notes: r.notes ?? null,
+    image_paths: r.image_paths ?? [], holdings: (r.holdings as unknown as RefHolding[]) ?? [],
+    total_value: r.total_value != null ? Number(r.total_value) : null, total_value_currency: r.total_value_currency ?? null,
+    ai_summary: r.ai_summary ?? null, created_at: r.created_at, updated_at: r.updated_at,
   };
 }
 
@@ -208,7 +207,7 @@ export const referencesQuery = (userId: string) =>
       try {
         const { data, error } = await supabase.from("reference_portfolios").select("*").order("created_at", { ascending: false });
         if (error) throw error;
-        const rows = (data ?? []).map((r) => normalizeRef(r as Record<string, unknown>));
+        const rows = (data ?? []).map(normalizeRef);
         saveSnapshot("refs", userId, rows);
         return rows;
       } catch (e) {
