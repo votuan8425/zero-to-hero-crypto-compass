@@ -3,8 +3,10 @@
  *
  * Only the admin writes this row; every logged-in user reads it. The
  * payload is PERCENT-ONLY: { symbol, name, percent }. Quantities,
- * values, invested amounts, dates, notes and images are never stored
- * here and never leave the admin's own portfolio.
+ * values, invested amounts, notes and images are never stored here and
+ * never leave the admin's own portfolio. The row also stores two public
+ * stats: the accumulation start date and the current P/L % vs capital
+ * (both percentages/dates — never money amounts).
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { AllocationSlice } from "./portfolio";
@@ -17,10 +19,20 @@ export interface AdminAllocationSlice {
   percent: number;
 }
 
+/** Số liệu công khai kèm theo portfolio đã đăng — chỉ % và thời gian, không số tiền. */
+export interface AdminAllocationStats {
+  /** Ngày mua đầu tiên của admin (YYYY-MM-DD) — dùng để tính "đã tích lũy bao lâu". */
+  startedAt: string | null;
+  /** Lãi/lỗ hiện tại theo % vốn đã bỏ ra (có thể âm). */
+  pnlPct: number | null;
+}
+
 export interface AdminAllocation {
   user_id: string;
   slices: AdminAllocationSlice[];
   updated_at: string;
+  startedAt: string | null;
+  pnlPct: number | null;
 }
 
 export const adminAllocationKey = ["admin-allocation"] as const;
@@ -58,11 +70,38 @@ export function allocationChanged(
   });
 }
 
+/** True khi số liệu công bố thay đổi (ngày bắt đầu khác, hoặc lãi/lỗ lệch > 0.01). */
+export function statsChanged(
+  prev: AdminAllocationStats | null | undefined,
+  next: AdminAllocationStats,
+): boolean {
+  const a = prev ?? { startedAt: null, pnlPct: null };
+  if ((a.startedAt ?? null) !== (next.startedAt ?? null)) return true;
+  const p = a.pnlPct ?? null;
+  const n = next.pnlPct ?? null;
+  if (p === null || n === null) return p !== n;
+  return Math.abs(p - n) > 0.01;
+}
+
 type AdminAllocationRow = {
   user_id: string;
   slices: unknown;
   updated_at: string;
+  started_at?: string | null;
+  pnl_pct?: number | string | null;
 };
+
+function parseRow(row: AdminAllocationRow): AdminAllocation {
+  const pnl =
+    row.pnl_pct == null || row.pnl_pct === "" ? null : Number(row.pnl_pct);
+  return {
+    user_id: row.user_id,
+    slices: parseSlices(row.slices),
+    updated_at: row.updated_at,
+    startedAt: row.started_at ?? null,
+    pnlPct: Number.isFinite(pnl) ? pnl : null,
+  };
+}
 
 function parseSlices(raw: unknown): AdminAllocationSlice[] {
   if (!Array.isArray(raw)) return [];
@@ -83,19 +122,29 @@ function parseSlices(raw: unknown): AdminAllocationSlice[] {
  * Reads the single admin allocation row. Returns null when there is none
  * yet — including when the admin_allocations table does not exist yet
  * (migration 0002 not applied); the UI shows an empty state instead of
- * crashing.
+ * crashing. When migration 0003 (started_at / pnl_pct) has not been
+ * applied yet, the stats fall back to null instead of failing the read.
  */
 export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
   try {
     const { data, error } = await supabase
       .from("admin_allocations")
+      .select("user_id, slices, updated_at, started_at, pnl_pct")
+      .limit(1)
+      .maybeSingle();
+    if (!error) {
+      const row = data as AdminAllocationRow | null;
+      return row ? parseRow(row) : null;
+    }
+    // Cột stats chưa có (chưa chạy migration 0003): đọc lại theo cột cũ.
+    const legacy = await supabase
+      .from("admin_allocations")
       .select("user_id, slices, updated_at")
       .limit(1)
       .maybeSingle();
-    if (error) return null;
-    const row = data as AdminAllocationRow | null;
-    if (!row) return null;
-    return { user_id: row.user_id, slices: parseSlices(row.slices), updated_at: row.updated_at };
+    if (legacy.error) return null;
+    const row = legacy.data as AdminAllocationRow | null;
+    return row ? parseRow(row) : null;
   } catch {
     return null;
   }
@@ -103,23 +152,44 @@ export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
 
 /**
  * Syncs the admin's current portfolio allocation (percent-only) to the
- * shared row. No-op for non-admin users and for empty allocations.
- * Only writes when the payload actually changed.
+ * shared row, plus the public stats (accumulation start date + P/L %).
+ * No-op for non-admin users and for empty allocations. Only writes when
+ * the payload actually changed. When migration 0003 has not been applied
+ * yet, the stats are dropped and only the slices are written.
  */
 export async function syncAdminAllocation(
   user: User,
   allocation: { slices: AllocationSlice[] },
+  stats: AdminAllocationStats = { startedAt: null, pnlPct: null },
 ): Promise<"synced" | "unchanged" | "skipped"> {
   if (!isAdminUser(user)) return "skipped";
   const slices = buildAdminAllocationSlices(allocation.slices);
   if (slices.length === 0) return "skipped";
   const existing = await fetchAdminAllocation();
-  if (existing && existing.user_id === user.id && !allocationChanged(existing.slices, slices)) {
+  if (
+    existing &&
+    existing.user_id === user.id &&
+    !allocationChanged(existing.slices, slices) &&
+    !statsChanged(existing, stats)
+  ) {
     return "unchanged";
   }
+  const payload = {
+    user_id: user.id,
+    slices,
+    started_at: stats.startedAt,
+    pnl_pct: stats.pnlPct,
+  };
   const { error } = await supabase
     .from("admin_allocations")
-    .upsert({ user_id: user.id, slices }, { onConflict: "user_id" });
-  if (error) throw error;
+    .upsert(payload, { onConflict: "user_id" });
+  if (error) {
+    // Cột stats chưa có: ghi lại chỉ với slices.
+    const fallback = await supabase
+      .from("admin_allocations")
+      .upsert({ user_id: user.id, slices }, { onConflict: "user_id" });
+    if (fallback.error) throw fallback.error;
+    return "synced";
+  }
   return "synced";
 }

@@ -2,7 +2,17 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Clock, Flame, Pencil, Plus, Trash2, Trophy, Wallet } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Pencil,
+  Plus,
+  Trash2,
+  Trophy,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,16 +30,22 @@ import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
 import { DonutChart } from "@/components/app/donut-chart";
 import { Stat } from "@/components/app/stat";
-import { StreakCalendar } from "@/components/app/streak-calendar";
 import { TransactionDialog } from "@/components/app/transaction-dialog";
 import { useSync } from "@/components/app/sync-provider";
 import { convertUsd, useCurrency, usePortfolio } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { deleteTransaction } from "@/lib/data";
 import { readQueue } from "@/lib/offline-queue";
+import {
+  groupByMonth,
+  monthLabel,
+  yearTotals,
+  type MonthGroup,
+} from "@/lib/accumulation";
 import { computeStreak, type Tx } from "@/lib/portfolio";
-import { formatDate, formatMoney, formatNumber, parseDateOnly, toDateKey } from "@/lib/format";
+import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { displaySymbol } from "@/lib/coins";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tich-san")({
   validateSearch: (s: Record<string, unknown>): { add?: boolean } =>
@@ -39,12 +55,12 @@ export const Route = createFileRoute("/_authenticated/tich-san")({
       { title: "Tích sản — ZERO TO HERO" },
       {
         name: "description",
-        content: "Ghi lại các lần mua định kỳ, chuỗi tích sản và lịch tích sản của bạn.",
+        content: "Ghi lại các lần mua định kỳ, tích lũy theo tháng và năm của bạn.",
       },
       { property: "og:title", content: "Tích sản — ZERO TO HERO" },
       {
         property: "og:description",
-        content: "Chuỗi tích sản, lịch tích sản và lịch sử giao dịch.",
+        content: "Tích lũy theo tháng, theo năm và lịch sử giao dịch.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -53,6 +69,11 @@ export const Route = createFileRoute("/_authenticated/tich-san")({
   component: AccumulatePage,
 });
 
+/**
+ * Tích lũy theo tháng / năm — tích sản không phải chuyện của ngày nên trang
+ * này nhìn theo tháng và năm: biểu đồ 12 cột vốn theo tháng, chọn tháng để
+ * xem chi tiết, lịch sử nhóm theo tháng. Chuỗi ngày chỉ còn là 2 chỉ số nhỏ.
+ */
 function AccumulatePage() {
   const user = useUser();
   const qc = useQueryClient();
@@ -75,23 +96,25 @@ function AccumulatePage() {
 
   const list = txs.data ?? [];
   const streak = computeStreak(list.map((t) => t.tx_date));
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const t of list) {
-      const k = toDateKey(parseDateOnly(t.tx_date));
-      m.set(k, (m.get(k) ?? 0) + 1);
-    }
-    return m;
-  }, [list]);
+  const groups = useMemo(() => groupByMonth(list), [list]);
   const pendingIds = useMemo(
     () => new Set(readQueue(user.id).map((o) => o.id)),
     [user.id, pending, list],
   );
-  const groups = useMemo(() => {
-    const g = new Map<string, Tx[]>();
-    for (const t of list) g.set(t.tx_date, [...(g.get(t.tx_date) ?? []), t]);
-    return [...g.entries()];
-  }, [list]);
+
+  const thisYear = new Date().getFullYear();
+  const firstYear = groups.length > 0 ? groups[groups.length - 1]?.year ?? thisYear : thisYear;
+  const [year, setYear] = useState(thisYear);
+  const yearGroups = useMemo(() => groups.filter((g) => g.year === year), [groups, year]);
+  const yearTotal = useMemo(() => yearTotals(groups, year), [groups, year]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selected: MonthGroup | null =
+    yearGroups.find((g) => g.key === selectedKey) ??
+    yearGroups.find((g) => g.key === `${thisYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`) ??
+    yearGroups[0] ??
+    null;
+  const maxMonth = Math.max(0, ...yearGroups.map((g) => g.investedUsd));
+
   const money = (usd: number | null) => formatMoney(convertUsd(usd, currency, usdVnd), currency);
   const avg = list.length ? totals.investedUsd / list.length : null;
 
@@ -127,34 +150,132 @@ function AccumulatePage() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <section className="panel p-5">
-          <div className="mb-5 flex items-center gap-4">
-            <div className="lime-gradient grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-primary-foreground shadow-glow">
-              <Flame className="h-8 w-8" />
-            </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="panel p-4">
+          <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Chuỗi tích sản
-              </div>
-              <div className="num text-3xl font-bold">
-                {streak.current}{" "}
-                <span className="text-base font-medium text-muted-foreground">ngày</span>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {streak.boughtToday
-                  ? "Bạn đã tích sản hôm nay 🎯"
-                  : streak.current > 0
-                    ? "Tích sản hôm nay để giữ chuỗi!"
-                    : "Bắt đầu chuỗi mới ngay hôm nay."}
-              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wider">
+                Tích lũy theo tháng
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Năm {year} · {yearTotal.buys} lần mua · Tổng vốn {money(yearTotal.investedUsd)}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Năm trước"
+                disabled={year <= firstYear}
+                onClick={() => {
+                  setYear(year - 1);
+                  setSelectedKey(null);
+                }}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="num min-w-14 text-center text-sm font-semibold">{year}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Năm sau"
+                disabled={year >= thisYear}
+                onClick={() => {
+                  setYear(year + 1);
+                  setSelectedKey(null);
+                }}
+              >
+                <ChevronRight />
+              </Button>
             </div>
           </div>
-          <StreakCalendar counts={counts} />
+
+          {yearGroups.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Chưa có lần mua nào trong năm {year}.
+            </div>
+          ) : (
+            <>
+              <div className="flex h-28 items-end gap-1.5">
+                {Array.from({ length: 12 }, (_, i) => {
+                  const m = i + 1;
+                  const key = `${year}-${String(m).padStart(2, "0")}`;
+                  const g = yearGroups.find((x) => x.month === m);
+                  const h = g && maxMonth > 0 ? Math.max(6, (g.investedUsd / maxMonth) * 100) : 0;
+                  const isSel = selected?.key === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedKey(key)}
+                      disabled={!g}
+                      aria-label={
+                        g
+                          ? `${monthLabel(key)}: ${g.buys} lần mua, ${money(g.investedUsd)}`
+                          : `Tháng ${m}: chưa có giao dịch`
+                      }
+                      className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+                    >
+                      <span className="num text-[10px] font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                        {g ? g.buys : ""}
+                      </span>
+                      <span
+                        className={cn(
+                          "w-full rounded-t-md transition-colors",
+                          g
+                            ? isSel
+                              ? "lime-gradient"
+                              : "bg-primary/60 group-hover:bg-primary"
+                            : "bg-surface-raised",
+                        )}
+                        style={{ height: `${h}%` }}
+                      />
+                      <span
+                        className={cn(
+                          "text-[10px] font-medium",
+                          isSel ? "text-primary" : "text-muted-foreground",
+                        )}
+                      >
+                        T{m}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selected && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-raised px-4 py-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">{monthLabel(selected.key)}</div>
+                    <div className="num mt-0.5 text-lg font-bold">
+                      {money(selected.investedUsd)}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <div>
+                      {selected.buys} lần mua · TB{" "}
+                      {money(selected.buys ? selected.investedUsd / selected.buys : null)}
+                    </div>
+                    <div className="mt-0.5">Bấm vào cột để xem tháng khác</div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </section>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
+            <Stat
+              icon={<Wallet className="h-3.5 w-3.5" />}
+              label="Tổng vốn"
+              value={money(totals.investedUsd)}
+            />
+            <Stat
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Trung bình mỗi lần"
+              value={money(avg)}
+              hint={`${list.length} lần mua`}
+            />
             <Stat
               icon={<Trophy className="h-3.5 w-3.5" />}
               label="Chuỗi dài nhất"
@@ -164,26 +285,18 @@ function AccumulatePage() {
               icon={<CalendarDays className="h-3.5 w-3.5" />}
               label="Tổng ngày tích sản"
               value={streak.activeDays}
-            />
-            <Stat
-              icon={<Wallet className="h-3.5 w-3.5" />}
-              label="Tổng vốn"
-              value={money(totals.investedUsd)}
-              valueClassName="text-lg md:text-xl"
-            />
-            <Stat
-              icon={<Clock className="h-3.5 w-3.5" />}
-              label="Trung bình mỗi lần"
-              value={money(avg)}
-              valueClassName="text-lg md:text-xl"
-              hint={`${list.length} lần mua`}
+              hint={
+                streak.current > 0
+                  ? `Chuỗi hiện tại: ${streak.current} ngày`
+                  : "Chưa có chuỗi đang chạy"
+              }
             />
           </div>
 
           {holdings.length > 0 && (
-            <section className="panel p-5">
+            <section className="panel p-4">
               <h2 className="text-sm font-semibold uppercase tracking-wider">Phân bổ danh mục</h2>
-              <p className="mb-4 mt-1 text-xs text-muted-foreground">
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
                 {allocation.basis === "value"
                   ? "Theo giá trị hiện tại"
                   : "Theo vốn đã bỏ ra (chưa có đủ giá thị trường)"}
@@ -192,32 +305,43 @@ function AccumulatePage() {
                 items={allocation.slices}
                 centerValue={String(holdings.length)}
                 centerLabel="loại coin"
+                height={180}
               />
             </section>
           )}
+        </div>
+      </div>
 
-          <section className="panel overflow-hidden">
-            <h2 className="px-5 pt-5 text-sm font-semibold uppercase tracking-wider">
-              Lịch sử tích sản
-            </h2>
-            {txs.isLoading ? (
-              <div className="space-y-2 p-5">
-                <Skeleton className="h-12" />
-                <Skeleton className="h-12" />
-              </div>
-            ) : list.length === 0 ? (
-              <div className="p-5">
-                <EmptyState
-                  icon={<Plus className="h-6 w-6" />}
-                  title="Chưa có giao dịch"
-                  description="Bấm “Thêm lần mua” để ghi lại lần tích sản đầu tiên."
-                />
-              </div>
-            ) : (
-              <div className="mt-2">
-                {groups.map(([date, items]) => (
+      <section className="panel mt-4 overflow-hidden">
+        <h2 className="px-5 pt-5 text-sm font-semibold uppercase tracking-wider">
+          Lịch sử tích sản
+        </h2>
+        {txs.isLoading ? (
+          <div className="space-y-2 p-5">
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+          </div>
+        ) : list.length === 0 ? (
+          <div className="p-5">
+            <EmptyState
+              icon={<Plus className="h-6 w-6" />}
+              title="Chưa có giao dịch"
+              description="Bấm “Thêm lần mua” để ghi lại lần tích sản đầu tiên."
+            />
+          </div>
+        ) : (
+          <div className="mt-2">
+            {groups.map((g) => (
+              <div key={g.key}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2 bg-surface-raised/60 px-5 py-1.5 text-xs font-medium text-muted-foreground">
+                  <span className="capitalize text-foreground">{monthLabel(g.key)}</span>
+                  <span className="num">
+                    {g.buys} lần mua · {money(g.investedUsd)}
+                  </span>
+                </div>
+                {[...groupByDate(g.txs)].map(([date, items]) => (
                   <div key={date}>
-                    <div className="bg-surface-raised/60 px-5 py-1.5 text-xs font-medium capitalize text-muted-foreground">
+                    <div className="px-5 pt-3 text-xs font-medium capitalize text-muted-foreground">
                       {formatDate(date, "long")}
                     </div>
                     <ul className="divide-y divide-border">
@@ -270,10 +394,10 @@ function AccumulatePage() {
                   </div>
                 ))}
               </div>
-            )}
-          </section>
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <TransactionDialog
         open={open}
@@ -305,4 +429,11 @@ function AccumulatePage() {
       </AlertDialog>
     </div>
   );
+}
+
+/** Nhóm các giao dịch trong một tháng theo ngày (mới nhất trước). */
+function groupByDate(txs: Tx[]): [string, Tx[]][] {
+  const g = new Map<string, Tx[]>();
+  for (const t of txs) g.set(t.tx_date, [...(g.get(t.tx_date) ?? []), t]);
+  return [...g.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
 }

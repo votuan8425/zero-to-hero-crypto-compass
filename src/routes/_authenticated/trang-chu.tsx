@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowRight,
   CalendarCheck,
@@ -8,20 +10,24 @@ import {
   Flame,
   Layers,
   Plus,
+  Star,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
+import { PriceChartDialog } from "@/components/app/price-chart-dialog";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
 import { computeStreak } from "@/lib/portfolio";
 import { GOLD_SYMBOL } from "@/lib/prices.functions";
 import type { PriceMap } from "@/lib/portfolio";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
-import { displaySymbol } from "@/lib/coins";
+import { COINS, displaySymbol } from "@/lib/coins";
+import { loadFavorites, saveFavorites, toggleFavorite } from "@/lib/favorites";
 import { scanLegacyData } from "@/lib/legacy-migration";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/trang-chu")({
   head: () => ({
@@ -147,7 +153,13 @@ function HomePage() {
         />
       </div>
 
-      <MarketPrices prices={prices.data?.prices} loading={prices.isLoading} money={money} />
+      <MarketPrices
+        prices={prices.data?.prices}
+        loading={prices.isLoading}
+        money={money}
+        currency={currency}
+        usdVnd={usdVnd}
+      />
 
       {holdings.length === 0 && !txs.isLoading ? (
         <div className="mt-6">
@@ -179,8 +191,18 @@ function HomePage() {
                       <span className="font-semibold">{displaySymbol(h.symbol)}</span>
                       <span className="truncate text-xs text-muted-foreground">{h.name}</span>
                     </div>
-                    <div className="num text-xs text-muted-foreground">
-                      {formatNumber(h.quantity)} · Giá vốn TB {money(h.avgCostUsd)}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="num inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
+                        Giá mua TB {money(h.avgCostUsd)}
+                      </span>
+                      {h.priceUsd != null && (
+                        <span className="num text-xs text-muted-foreground">
+                          Hiện tại {money(h.priceUsd)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="num mt-1 text-xs text-muted-foreground">
+                      {formatNumber(h.quantity)} {displaySymbol(h.symbol)} · {h.purchases} lần mua
                     </div>
                   </div>
                   <div className="text-right">
@@ -202,29 +224,55 @@ function HomePage() {
 }
 
 /**
- * Bảng giá kiểu OKX: BTC, ETH và Vàng (PAXG — 1 PAXG ≈ 1 ounce vàng,
- * giá lấy từ OKX, fallback CoinGecko; xem src/lib/prices.functions.ts).
- * Giá theo đơn vị tiền tệ người dùng đang chọn; vàng tính theo ounce.
+ * Bảng giá kiểu OKX: toàn bộ coin hỗ trợ, kéo cuộn để xem hết. Bấm ngôi sao
+ * để ghim tối đa 3 coin yêu thích lên đầu (mặc định BTC, ETH, Vàng — lưu trên
+ * thiết bị này). Bấm vào một coin để mở popup biểu đồ theo ngày / tháng / năm.
+ * Vàng tính theo ounce (PAXG ≈ 1 ounce), Bạc theo KAG (CoinGecko).
  */
 function MarketPrices({
   prices,
   loading,
   money,
+  currency,
+  usdVnd,
 }: {
   prices: PriceMap | undefined;
   loading: boolean;
   money: (usd: number | null, compact?: boolean) => string;
+  currency: "VND" | "USD";
+  usdVnd: number | null;
 }) {
-  const rows = [
-    { symbol: "BTC", name: "Bitcoin", unit: null as string | null },
-    { symbol: "ETH", name: "Ethereum", unit: null as string | null },
-    { symbol: GOLD_SYMBOL, name: "Vàng", unit: "1 ounce" },
-  ];
+  const [favorites, setFavorites] = useState<string[]>(() => loadFavorites());
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
+
+  const rows = useMemo(() => {
+    const favSet = new Set(favorites);
+    const favRows = favorites
+      .map((s) => COINS.find((c) => c.symbol === s))
+      .filter((c): c is (typeof COINS)[number] => !!c);
+    const rest = COINS.filter((c) => !favSet.has(c.symbol));
+    return [...favRows, ...rest];
+  }, [favorites]);
+
+  function onToggleStar(symbol: string) {
+    const res = toggleFavorite(symbol, favorites);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    setFavorites(res.list);
+    saveFavorites(res.list);
+  }
+
   return (
     <section className="panel mt-6 p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wider">Giá thị trường</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider">Giá thị trường</h2>
+        <span className="text-xs text-muted-foreground">{COINS.length} coin · từ OKX</span>
+      </div>
       <p className="mb-4 mt-1 text-xs text-muted-foreground">
-        Giá từ OKX · Vàng theo PAXG (1 PAXG ≈ 1 ounce)
+        Bấm ngôi sao để ghim tối đa 3 coin yêu thích lên đầu · Bấm vào coin để xem biểu đồ · Vàng
+        theo PAXG (1 PAXG ≈ 1 ounce)
       </p>
       {loading ? (
         <div className="space-y-2">
@@ -233,35 +281,76 @@ function MarketPrices({
           <Skeleton className="h-12" />
         </div>
       ) : (
-        <ul className="divide-y divide-border">
-          {rows.map((r) => {
-            const q = prices?.[r.symbol];
+        <ul className="max-h-[430px] divide-y divide-border overflow-y-auto pr-1">
+          {rows.map((c) => {
+            const q = prices?.[c.symbol];
+            const isFav = favorites.includes(c.symbol);
             return (
-              <li key={r.symbol} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <CoinLogo symbol={r.symbol} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold">{r.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {r.symbol === GOLD_SYMBOL ? "PAXG" : displaySymbol(r.symbol)}
-                      {r.unit ? ` · ${r.unit}` : ""}
-                    </span>
+              <li key={c.symbol}>
+                <button
+                  type="button"
+                  onClick={() => setChartSymbol(c.symbol)}
+                  className="flex w-full items-center gap-3 py-3 text-left transition-colors first:pt-0 last:pb-0 hover:bg-surface-raised/40"
+                  aria-label={`Xem biểu đồ ${c.name}`}
+                >
+                  <CoinLogo symbol={c.symbol} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-semibold">{c.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {c.symbol === GOLD_SYMBOL ? "PAXG" : displaySymbol(c.symbol)}
+                        {c.unit === "ounce" ? " · 1 ounce" : ""}
+                      </span>
+                    </div>
+                    <div className="num text-xs text-muted-foreground">
+                      {q ? money(q.usd) : "Chưa có giá"}
+                    </div>
                   </div>
-                  <div className="num text-xs text-muted-foreground">
-                    {q ? money(q.usd) : "Chưa có giá"}
+                  <div className="text-right">
+                    <PnlText value={q?.change24h ?? null} className="text-sm font-semibold">
+                      {q?.change24h != null ? formatPercent(q.change24h, 2, true) : "—"}
+                    </PnlText>
+                    <div className="text-xs text-muted-foreground">24 giờ</div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <PnlText value={q?.change24h ?? null} className="text-sm font-semibold">
-                    {q?.change24h != null ? formatPercent(q.change24h, 2, true) : "—"}
-                  </PnlText>
-                  <div className="text-xs text-muted-foreground">24 giờ</div>
-                </div>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={isFav ? `Bỏ ghim ${c.name}` : `Ghim ${c.name} lên đầu`}
+                    aria-pressed={isFav}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleStar(c.symbol);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleStar(c.symbol);
+                      }
+                    }}
+                    className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full transition-colors hover:bg-surface-raised"
+                  >
+                    <Star
+                      className={cn(
+                        "h-5 w-5",
+                        isFav ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
+                      )}
+                    />
+                  </span>
+                </button>
               </li>
             );
           })}
         </ul>
       )}
+      <PriceChartDialog
+        open={chartSymbol !== null}
+        onOpenChange={(v) => !v && setChartSymbol(null)}
+        symbol={chartSymbol}
+        money={money}
+        currency={currency}
+        usdVnd={usdVnd}
+      />
     </section>
   );
 }

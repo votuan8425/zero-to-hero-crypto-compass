@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocationChanged, buildAdminAllocationSlices } from "@/lib/admin-allocation";
+import { allocationChanged, buildAdminAllocationSlices, statsChanged } from "@/lib/admin-allocation";
 import type { AllocationSlice } from "@/lib/portfolio";
 
 describe("admin allocation payload is percent-only", () => {
@@ -49,5 +49,19 @@ describe("allocationChanged", () => {
     expect(allocationChanged(prev, [{ symbol: "ETH", name: "Ethereum", percent: 45 }])).toBe(true);
     expect(allocationChanged(null, [{ symbol: "BTC", name: "Bitcoin", percent: 45 }])).toBe(true);
     expect(allocationChanged(prev, prev)).toBe(false);
+  });
+});
+
+describe("statsChanged", () => {
+  it("không đổi khi ngày bắt đầu và lãi/lỗ giống nhau (lệch ≤ 0.01)", () => {
+    const prev = { startedAt: "2025-01-02", pnlPct: 12.345 };
+    expect(statsChanged(prev, { startedAt: "2025-01-02", pnlPct: 12.35 })).toBe(false);
+  });
+  it("đổi khi ngày bắt đầu khác hoặc lãi/lỗ lệch > 0.01", () => {
+    const prev = { startedAt: "2025-01-02", pnlPct: 12.3 };
+    expect(statsChanged(prev, { startedAt: "2025-02-01", pnlPct: 12.3 })).toBe(true);
+    expect(statsChanged(prev, { startedAt: "2025-01-02", pnlPct: 12.5 })).toBe(true);
+    expect(statsChanged(prev, { startedAt: "2025-01-02", pnlPct: -5 })).toBe(true);
+    expect(statsChanged(null, { startedAt: "2025-01-02", pnlPct: 12.3 })).toBe(true);
   });
 });
