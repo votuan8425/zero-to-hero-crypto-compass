@@ -1,16 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { getPrices } from "@/lib/prices.functions";
+import { getPrices, type PricesResult } from "@/lib/prices.functions";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfolio";
 import type { Currency } from "@/lib/format";
 import { useUser } from "./use-user";
 
+const PRICE_CACHE = "zth:prices";
+
+function readPriceCache(): PricesResult | null {
+  try {
+    const raw = localStorage.getItem(PRICE_CACHE);
+    return raw ? (JSON.parse(raw) as PricesResult) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Live prices, refreshed every minute; falls back to the last known prices when offline. */
 export function usePrices(symbols: string[]) {
   const key = [...new Set(symbols)].sort();
   return useQuery({
     queryKey: ["prices", ...key],
-    queryFn: () => getPrices({ data: { symbols: key } }),
+    queryFn: async (): Promise<PricesResult> => {
+      const cached = readPriceCache();
+      try {
+        const res = await getPrices({ data: { symbols: key } });
+        if (res.error) throw new Error(res.error);
+        const merged: PricesResult = {
+          ...res,
+          prices: { ...(cached?.prices ?? {}), ...res.prices },
+          usdVnd: res.usdVnd ?? cached?.usdVnd ?? null,
+        };
+        localStorage.setItem(PRICE_CACHE, JSON.stringify(merged));
+        return res;
+      } catch (e) {
+        if (cached) {
+          return { ...cached, error: "Đang dùng giá đã lưu gần nhất (không tải được giá mới)." };
+        }
+        throw e;
+      }
+    },
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev) => prev,
