@@ -82,7 +82,7 @@ function AccumulatePage() {
   const search = Route.useSearch();
   const currency = useCurrency();
   const { pending } = useSync();
-  const { txs, totals, allocation, holdings, usdVnd } = usePortfolio();
+  const { txs, totals, allocation, holdings, usdVnd, usdKrw } = usePortfolio();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tx | null>(null);
   const [toDelete, setToDelete] = useState<Tx | null>(null);
@@ -118,7 +118,8 @@ function AccumulatePage() {
     null;
   const maxMonth = Math.max(0, ...yearGroups.map((g) => g.investedUsd));
 
-  const money = (usd: number | null) => formatMoney(convertUsd(usd, currency, usdVnd), currency);
+  const money = (usd: number | null) =>
+    formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency);
   const avg = list.length ? totals.investedUsd / list.length : null;
 
   async function confirmDelete() {
@@ -381,7 +382,7 @@ function AccumulatePage() {
                     </div>
                     <ul className="divide-y divide-border">
                       {items.map((t) => (
-                        <li key={t.id} className="flex items-center gap-3 px-5 py-3">
+                        <li key={t.id} className="flex items-center gap-2 px-4 py-3">
                           <CoinLogo symbol={t.symbol} size={32} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -397,7 +398,7 @@ function AccumulatePage() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="num truncate text-xs text-muted-foreground">
+                            <div className="num whitespace-nowrap overflow-hidden text-xs text-muted-foreground">
                               Giá {money(t.price_usd)} · Tổng{" "}
                               {money(t.quantity * t.price_usd + t.fee_usd)}
                               {t.note ? ` · ${t.note}` : ""}
@@ -407,6 +408,7 @@ function AccumulatePage() {
                             variant="ghost"
                             size="icon"
                             aria-label="Sửa giao dịch"
+                            className="h-8 w-8"
                             onClick={() => {
                               setEditing(t);
                               setOpen(true);
@@ -418,7 +420,7 @@ function AccumulatePage() {
                             variant="ghost"
                             size="icon"
                             aria-label="Xoá giao dịch"
-                            className="text-muted-foreground hover:text-loss"
+                            className="h-8 w-8 text-muted-foreground hover:text-loss"
                             onClick={() => setToDelete(t)}
                           >
                             <Trash2 />

@@ -17,6 +17,7 @@ export interface Tx {
 export interface PriceQuote {
   usd: number;
   vnd: number;
+  krw: number;
   change24h: number | null;
 }
 

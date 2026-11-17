@@ -5,6 +5,7 @@ import type { PriceMap } from "./portfolio";
 export interface PricesResult {
   prices: PriceMap;
   usdVnd: number | null;
+  usdKrw: number | null;
   fetchedAt: string;
   error: string | null;
 }
@@ -15,15 +16,16 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function usdVndRate(): Promise<number | null> {
+/** Tỷ giá USD → VND và USD → KRW (cùng một lần gọi, không cần key). */
+async function fxRates(): Promise<{ vnd: number | null; krw: number | null }> {
   try {
     const j = await fetchJson<{ rates?: Record<string, number> }>(
       "https://open.er-api.com/v6/latest/USD",
     );
-    return j.rates?.["VND"] ?? null;
+    return { vnd: j.rates?.["VND"] ?? null, krw: j.rates?.["KRW"] ?? null };
   } catch (e) {
     console.error("fx fetch failed", e);
-    return null;
+    return { vnd: null, krw: null };
   }
 }
 
@@ -115,10 +117,10 @@ async function geckoPrices(): Promise<Record<string, { usd: number; change24h: n
   return out;
 }
 
-/** Public market prices (no user data) for all supported coins, in USD and VND. */
+/** Public market prices (no user data) for all supported coins, in USD, VND and KRW. */
 export const getPrices = createServerFn({ method: "GET" }).handler(
   async (): Promise<PricesResult> => {
-    const ratePromise = usdVndRate();
+    const ratePromise = fxRates();
     let usd: Record<string, { usd: number; change24h: number | null }> = {};
     try {
       usd = await okxPrices();
@@ -142,18 +144,25 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
       const kag = await kagGeckoPrice();
       if (kag) usd[SILVER_SYMBOL] = kag;
     }
-    const usdVnd = await ratePromise;
+    const fx = await ratePromise;
+    const usdVnd = fx.vnd;
+    const usdKrw = fx.krw;
     const prices: PriceMap = {};
     for (const [sym, q] of Object.entries(usd)) {
-      prices[sym] = { usd: q.usd, vnd: usdVnd ? q.usd * usdVnd : 0, change24h: q.change24h };
+      prices[sym] = {
+        usd: q.usd,
+        vnd: usdVnd ? q.usd * usdVnd : 0,
+        krw: usdKrw ? q.usd * usdKrw : 0,
+        change24h: q.change24h,
+      };
     }
     const error =
       Object.keys(prices).length === 0
         ? "Không tải được giá thị trường. Vui lòng thử lại sau."
         : usdVnd == null
-          ? "Không tải được tỷ giá USD/VND."
+          ? "Không tải được tỷ giá."
           : null;
-    return { prices, usdVnd, fetchedAt: new Date().toISOString(), error };
+    return { prices, usdVnd, usdKrw, fetchedAt: new Date().toISOString(), error };
   },
 );
 

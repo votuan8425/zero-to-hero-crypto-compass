@@ -57,14 +57,18 @@ export function TransactionDialog({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const prices = usePrices();
-  const rate = prices.data?.usdVnd ?? null;
+  const usdVnd = prices.data?.usdVnd ?? null;
+  const usdKrw = prices.data?.usdKrw ?? null;
+  /** Số đơn vị tiền tệ tương ứng 1 USDT (USDT = 1). */
+  const rateFor = (c: Currency): number | null =>
+    c === "VND" ? usdVnd : c === "KRW" ? usdKrw : 1;
 
   useEffect(() => {
     if (!open) return;
     setCur(defaultCurrency);
     if (existing) {
-      const r = defaultCurrency === "VND" && rate ? rate : 1;
-      const useCur: Currency = defaultCurrency === "VND" && rate ? "VND" : "USD";
+      const r = rateFor(defaultCurrency) ?? 1;
+      const useCur: Currency = rateFor(defaultCurrency) ? defaultCurrency : "USDT";
       setCur(useCur);
       setSymbol(existing.symbol);
       setQty(String(existing.quantity));
@@ -89,10 +93,11 @@ export function TransactionDialog({
     Number.isFinite(q) && Number.isFinite(p) ? q * p + (Number.isFinite(f) ? f : 0) : null;
   const live = prices.data?.prices[symbol];
 
-  const toUsd = useMemo(
-    () => (v: number) => (cur === "USD" ? v : rate ? v / rate : NaN),
-    [cur, rate],
-  );
+  const toUsd = useMemo(() => {
+    const r = rateFor(cur);
+    return (v: number) => (cur === "USDT" ? v : r ? v / r : NaN);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cur, usdVnd, usdKrw]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,8 +113,8 @@ export function TransactionDialog({
       toast.error("Phí giao dịch không hợp lệ.");
       return;
     }
-    if (cur === "VND" && !rate) {
-      toast.error("Chưa có tỷ giá USD/VND. Vui lòng nhập giá bằng USD hoặc thử lại khi có mạng.");
+    if (cur !== "USDT" && !rateFor(cur)) {
+      toast.error("Chưa có tỷ giá. Vui lòng nhập giá bằng USDT hoặc thử lại khi có mạng.");
       return;
     }
     if (date > todayKey()) {
@@ -203,8 +208,11 @@ export function TransactionDialog({
                 <ToggleGroupItem value="VND" className="h-7 px-2.5 text-xs">
                   VND
                 </ToggleGroupItem>
-                <ToggleGroupItem value="USD" className="h-7 px-2.5 text-xs">
-                  USD
+                <ToggleGroupItem value="USDT" className="h-7 px-2.5 text-xs">
+                  USDT
+                </ToggleGroupItem>
+                <ToggleGroupItem value="KRW" className="h-7 px-2.5 text-xs">
+                  KRW
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -215,7 +223,13 @@ export function TransactionDialog({
                 required
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder={cur === "VND" ? "Ví dụ: 1650000000" : "Ví dụ: 64000"}
+                placeholder={
+                  cur === "VND"
+                    ? "Ví dụ: 1650000000"
+                    : cur === "KRW"
+                      ? "Ví dụ: 88000000"
+                      : "Ví dụ: 64000"
+                }
                 className="num h-11"
               />
               <Button
@@ -224,7 +238,16 @@ export function TransactionDialog({
                 className="h-11 shrink-0"
                 disabled={!live}
                 onClick={() =>
-                  live && setPrice(String(cur === "USD" ? live.usd : Math.round(live.vnd)))
+                  live &&
+                  setPrice(
+                    String(
+                      cur === "USDT"
+                        ? live.usd
+                        : cur === "KRW"
+                          ? Math.round(live.krw)
+                          : Math.round(live.vnd),
+                    ),
+                  )
                 }
               >
                 Giá hiện tại

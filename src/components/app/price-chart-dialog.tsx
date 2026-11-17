@@ -35,6 +35,7 @@ export function PriceChartDialog({
   money,
   currency,
   usdVnd,
+  usdKrw,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -42,6 +43,7 @@ export function PriceChartDialog({
   money: (usd: number | null, compact?: boolean) => string;
   currency: Currency;
   usdVnd: number | null;
+  usdKrw: number | null;
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
   const gradientId = useId();
@@ -115,7 +117,11 @@ export function PriceChartDialog({
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
               {range === "1D" ? "24 giờ qua" : range === "1M" ? "30 ngày qua" : "52 tuần qua"}
-              {currency === "VND" && usdVnd ? ` · 1 USD ≈ ${formatNumber(usdVnd, 0)} ₫` : ""}
+              {currency === "VND" && usdVnd
+                ? ` · 1 USDT ≈ ${formatNumber(usdVnd, 0)} ₫`
+                : currency === "KRW" && usdKrw
+                  ? ` · 1 USDT ≈ ${formatNumber(usdKrw, 0)} ₩`
+                  : ""}
             </div>
           </div>
           <div className="text-right">
@@ -179,7 +185,7 @@ export function PriceChartDialog({
                     fontSize="11"
                     fill="var(--muted-foreground)"
                   >
-                    {money(t.value, currency === "VND")}
+                    {money(t.value, currency !== "USDT")}
                   </text>
                 </g>
               ))}

@@ -29,6 +29,17 @@ import { loadFavorites, saveFavorites, toggleFavorite } from "@/lib/favorites";
 import { scanLegacyData } from "@/lib/legacy-migration";
 import { cn } from "@/lib/utils";
 
+/** " · 1 USDT ≈ 26.000 ₫" hoặc " · 1 USDT ≈ 1.380 ₩" — USDT thì không cần. */
+function rateHint(
+  currency: "VND" | "USDT" | "KRW",
+  usdVnd: number | null,
+  usdKrw: number | null,
+): string {
+  if (currency === "VND" && usdVnd) return ` · 1 USDT ≈ ${formatNumber(usdVnd, 0)} ₫`;
+  if (currency === "KRW" && usdKrw) return ` · 1 USDT ≈ ${formatNumber(usdKrw, 0)} ₩`;
+  return "";
+}
+
 export const Route = createFileRoute("/_authenticated/trang-chu")({
   head: () => ({
     meta: [
@@ -49,7 +60,7 @@ export const Route = createFileRoute("/_authenticated/trang-chu")({
 function HomePage() {
   const currency = useCurrency();
   const { data: profile } = useProfile();
-  const { txs, prices, holdings, totals, usdVnd } = usePortfolio();
+  const { txs, prices, holdings, totals, usdVnd, usdKrw } = usePortfolio();
   const legacy = useQuery({
     queryKey: ["legacy-scan"],
     queryFn: scanLegacyData,
@@ -66,7 +77,7 @@ function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txs.data]);
   const money = (usd: number | null, compact = false) =>
-    formatMoney(convertUsd(usd, currency, usdVnd), currency, { compact });
+    formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency, { compact });
 
   const showLegacy = (legacy.data?.length ?? 0) > 0 && !profile?.local_migrated_at;
 
@@ -132,7 +143,7 @@ function HomePage() {
           {prices.data?.error
             ? prices.data.error
             : prices.data
-              ? `Giá cập nhật lúc ${formatDateTime(prices.data.fetchedAt)}${currency === "VND" && usdVnd ? ` · 1 USD ≈ ${formatNumber(usdVnd, 0)} ₫` : ""}`
+              ? `Giá cập nhật lúc ${formatDateTime(prices.data.fetchedAt)}${rateHint(currency, usdVnd, usdKrw)}`
               : "Đang tải giá thị trường…"}
         </div>
       </section>
@@ -178,6 +189,7 @@ function HomePage() {
         money={money}
         currency={currency}
         usdVnd={usdVnd}
+        usdKrw={usdKrw}
       />
 
       {holdings.length === 0 && !txs.isLoading ? (
@@ -211,7 +223,7 @@ function HomePage() {
                       <span className="truncate text-xs text-muted-foreground">{h.name}</span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="num inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
+                      <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
                         Giá mua Avg {money(h.avgCostUsd)}
                       </span>
                       {h.priceUsd != null && (
@@ -254,12 +266,14 @@ function MarketPrices({
   money,
   currency,
   usdVnd,
+  usdKrw,
 }: {
   prices: PriceMap | undefined;
   loading: boolean;
   money: (usd: number | null, compact?: boolean) => string;
-  currency: "VND" | "USD";
+  currency: "VND" | "USDT" | "KRW";
   usdVnd: number | null;
+  usdKrw: number | null;
 }) {
   const [favorites, setFavorites] = useState<string[]>(() => loadFavorites());
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
@@ -285,14 +299,9 @@ function MarketPrices({
 
   return (
     <section className="panel mt-6 p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider">Giá thị trường</h2>
-        <span className="text-xs text-muted-foreground">{COINS.length} coin · từ OKX</span>
       </div>
-      <p className="mb-4 mt-1 text-xs text-muted-foreground">
-        Hiện 3 coin — kéo xuống để xem hết · Bấm ngôi sao để ghim tối đa 3 coin yêu thích lên
-        đầu · Bấm vào coin để xem biểu đồ · Vàng theo PAXG (1 PAXG ≈ 1 ounce)
-      </p>
       {loading ? (
         <div className="space-y-2">
           <Skeleton className="h-12" />
@@ -369,6 +378,7 @@ function MarketPrices({
         money={money}
         currency={currency}
         usdVnd={usdVnd}
+        usdKrw={usdKrw}
       />
     </section>
   );

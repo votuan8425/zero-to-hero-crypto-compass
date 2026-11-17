@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { getPrices, type PricesResult } from "@/lib/prices.functions";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfolio";
-import type { Currency } from "@/lib/format";
+import { normalizeCurrency, type Currency } from "@/lib/format";
 import { useUser } from "./use-user";
 
 const PRICE_CACHE = "zth:prices";
@@ -41,6 +41,7 @@ export function usePrices() {
           ...res,
           prices: { ...(cached?.prices ?? {}), ...res.prices },
           usdVnd: res.usdVnd ?? cached?.usdVnd ?? null,
+          usdKrw: res.usdKrw ?? cached?.usdKrw ?? null,
         }),
       );
       return res;
@@ -58,7 +59,7 @@ export function useProfile() {
 
 export function useCurrency(): Currency {
   const { data } = useProfile();
-  return data?.currency ?? "VND";
+  return normalizeCurrency(data?.currency);
 }
 
 export function useTransactions() {
@@ -79,17 +80,27 @@ export function usePortfolio() {
     const holdings = computeHoldings(txs.data ?? [], prices.data?.prices ?? {});
     const totals = computeTotals(holdings);
     const allocation = computeAllocation(holdings);
-    return { txs, prices, holdings, totals, allocation, usdVnd: prices.data?.usdVnd ?? null };
+    return {
+      txs,
+      prices,
+      holdings,
+      totals,
+      allocation,
+      usdVnd: prices.data?.usdVnd ?? null,
+      usdKrw: prices.data?.usdKrw ?? null,
+    };
   }, [txs, prices]);
 }
 
-/** Converts a USD amount to the display currency. */
+/** Converts a USD amount to the display currency (USDT ≈ USD 1:1). */
 export function convertUsd(
   usd: number | null,
   currency: Currency,
   usdVnd: number | null,
+  usdKrw?: number | null,
 ): number | null {
   if (usd == null) return null;
-  if (currency === "USD") return usd;
+  if (currency === "USDT") return usd;
+  if (currency === "KRW") return usdKrw ? usd * usdKrw : null;
   return usdVnd ? usd * usdVnd : null;
 }

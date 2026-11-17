@@ -1,4 +1,18 @@
-export type Currency = "VND" | "USD";
+export type Currency = "VND" | "USDT" | "KRW";
+
+/** Các đơn vị tiền tệ hiển thị — giá niêm yết theo USDT như các app crypto (OKX, BNB). */
+export const CURRENCY_OPTIONS: { value: Currency; label: string }[] = [
+  { value: "VND", label: "Việt Nam Đồng (₫)" },
+  { value: "USDT", label: "USDT" },
+  { value: "KRW", label: "Won Hàn Quốc (₩)" },
+];
+
+/** Tài khoản cũ lưu "USD" thì hiểu là USDT (1 USDT ≈ 1 USD). */
+export function normalizeCurrency(value: string | null | undefined): Currency {
+  if (value === "USDT" || value === "KRW") return value;
+  if (value === "USD") return "USDT";
+  return "VND";
+}
 
 export const LOCALE = "vi-VN";
 export const TIME_ZONE = "Asia/Ho_Chi_Minh";
@@ -9,24 +23,25 @@ export function formatMoney(
   opts: { compact?: boolean } = {},
 ): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  if (currency === "VND") {
+  if (currency === "VND" || currency === "KRW") {
+    const symbol = currency === "VND" ? "₫" : "₩";
     if (opts.compact && Math.abs(value) >= 1_000_000) {
       return (
         new Intl.NumberFormat(LOCALE, { notation: "compact", maximumFractionDigits: 2 }).format(
           value,
-        ) + " ₫"
+        ) + ` ${symbol}`
       );
     }
-    return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value) + " ₫";
+    return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value) + ` ${symbol}`;
   }
+  // USDT: giá trị như USD (1 USDT ≈ 1 USD), hiển thị kiểu app crypto.
   const digits = Math.abs(value) < 1 && value !== 0 ? 4 : 2;
   return (
-    "$" +
     new Intl.NumberFormat(LOCALE, {
       minimumFractionDigits: 2,
       maximumFractionDigits: digits,
       notation: opts.compact && Math.abs(value) >= 1_000_000 ? "compact" : "standard",
-    }).format(value)
+    }).format(value) + " USDT"
   );
 }
 

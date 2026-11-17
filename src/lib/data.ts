@@ -11,7 +11,7 @@ import {
 } from "./offline-queue";
 import type { Tx } from "./portfolio";
 import type { RefHolding } from "./reference";
-import type { Currency } from "./format";
+import { normalizeCurrency, type Currency } from "./format";
 
 export const REFERENCE_BUCKET = "reference-images";
 
@@ -248,7 +248,7 @@ export const profileQuery = (userId: string) =>
         const profile: Profile = {
           id: p.id,
           display_name: p.display_name,
-          currency: (p.currency as Currency) ?? "VND",
+          currency: normalizeCurrency(p.currency),
           settings: (p.settings as Record<string, unknown>) ?? {},
           local_migrated_at: p.local_migrated_at,
         };
@@ -268,7 +268,11 @@ export async function updateProfile(
     settings?: Json;
   },
 ) {
-  const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
+  const normalized = {
+    ...patch,
+    ...(patch.currency ? { currency: normalizeCurrency(patch.currency) } : {}),
+  };
+  const { error } = await supabase.from("profiles").update(normalized).eq("id", userId);
   if (error) throw error;
 }
 

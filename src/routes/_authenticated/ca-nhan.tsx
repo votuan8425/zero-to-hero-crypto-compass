@@ -10,12 +10,14 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  ShieldCheck,
   Upload,
   UserRound,
   Wifi,
   WifiOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,9 +33,17 @@ import { useSync } from "@/components/app/sync-provider";
 import { useProfile, useReferences, useTransactions } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { profileKey, refsKey, txKey, updateProfile } from "@/lib/data";
+import { isAdminUser } from "@/lib/admin";
 import { buildBackup, downloadJson, importLegacy, parseBackup, restoreBackup } from "@/lib/backup";
 import { scanLegacyData } from "@/lib/legacy-migration";
-import { formatDate, formatDateTime, formatNumber, todayKey, type Currency } from "@/lib/format";
+import {
+  CURRENCY_OPTIONS,
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  todayKey,
+  type Currency,
+} from "@/lib/format";
 import { translateAuthError } from "@/lib/auth-errors";
 import { authEmailToUsername, isSyntheticAuthEmail } from "@/lib/username-auth";
 import { displaySymbol } from "@/lib/coins";
@@ -111,6 +121,9 @@ function PersonalPage() {
       await qc.invalidateQueries({ queryKey: profileKey(user.id) });
       toast.success("Đã lưu cài đặt.");
     } catch {
+      // Lưu thất bại (ví dụ chưa chạy migration 0004 nên USDT/KRW chưa lưu được):
+      // trả select về giá trị đã lưu để không hiển thị sai.
+      if (profile) setCurrency(profile.currency);
       toast.error("Không lưu được cài đặt. Vui lòng thử lại.");
     } finally {
       setSaving(false);
@@ -125,6 +138,7 @@ function PersonalPage() {
   }
 
   const provider = (user.app_metadata?.provider as string | undefined) ?? "email";
+  const isAdmin = isAdminUser(user);
   const storedUsername =
     typeof user.user_metadata?.["username"] === "string"
       ? (user.user_metadata["username"] as string)
@@ -155,6 +169,20 @@ function PersonalPage() {
               <dt className="text-muted-foreground">Tài khoản</dt>
               <dd className="font-medium">{username || "—"}</dd>
             </div>
+            <div className="flex justify-between gap-3 rounded-lg bg-surface-raised px-3 py-2">
+              <dt className="text-muted-foreground">Vai trò</dt>
+              <dd>
+                {isAdmin ? (
+                  <Badge className="gap-1 bg-primary/15 text-primary hover:bg-primary/15">
+                    <ShieldCheck className="h-3 w-3" /> Quản trị viên
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1">
+                    <UserRound className="h-3 w-3" /> Người dùng
+                  </Badge>
+                )}
+              </dd>
+            </div>
             {realEmail && (
               <div className="flex justify-between gap-3 rounded-lg bg-surface-raised px-3 py-2">
                 <dt className="text-muted-foreground">Email</dt>
@@ -179,8 +207,11 @@ function PersonalPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="VND">Việt Nam Đồng (₫)</SelectItem>
-                  <SelectItem value="USD">Đô la Mỹ ($)</SelectItem>
+                  {CURRENCY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

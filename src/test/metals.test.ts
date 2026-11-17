@@ -45,8 +45,8 @@ describe("vàng và bạc trong danh sách mua", () => {
 
 describe("giá trị danh mục của vàng và bạc", () => {
   const prices = {
-    PAXG: { usd: 3900, vnd: 0, change24h: 1 },
-    KAG: { usd: 47.78, vnd: 0, change24h: 0.3 },
+    PAXG: { usd: 3900, vnd: 0, krw: 0, change24h: 1 },
+    KAG: { usd: 47.78, vnd: 0, krw: 0, change24h: 0.3 },
   };
 
   it("tính giá trị hiện tại và lãi/lỗ theo đúng giá proxy", () => {
