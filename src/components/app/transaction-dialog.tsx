@@ -56,7 +56,7 @@ export function TransactionDialog({
   const [date, setDate] = useState(todayKey());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const prices = usePrices(COINS.map((c) => c.symbol));
+  const prices = usePrices();
   const rate = prices.data?.usdVnd ?? null;
 
   useEffect(() => {
