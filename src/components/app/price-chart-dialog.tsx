@@ -12,7 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CoinLogo } from "./coin-logo";
 import { PnlText } from "./stat";
 import { getCoin } from "@/lib/coins";
-import { getCandles, type ChartRange } from "@/lib/prices.functions";
+import { getCandles, type CandlePoint, type ChartRange } from "@/lib/prices.functions";
 import { formatNumber, type Currency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -22,18 +22,21 @@ const RANGES: { value: ChartRange; label: string }[] = [
   { value: "1Y", label: "Năm" },
 ];
 
-/** Màu từng cột xanh/đỏ: xanh nếu giá kỳ đó tăng so với kỳ trước; cột đầu
- *  tiên theo xu hướng chung (không có kỳ trước để so). */
-export function columnUps(closes: number[]): boolean[] {
-  if (closes.length === 0) return [];
-  const overallUp = closes[closes.length - 1] >= closes[0];
-  return closes.map((c, i) => (i === 0 ? overallUp : c >= closes[i - 1]));
+/** Nến tăng (xanh) khi đóng >= mở, giảm (đỏ) khi đóng < mở. */
+export function candleIsUp(p: CandlePoint): boolean {
+  return p.c >= p.o;
 }
 
 const W = 560;
 const H = 200;
 const PAD = 10;
 const LABEL_W = 84; // Gutter phải cho mốc giá.
+
+/** Segmented control (viên thuốc) cho 2 cụm nút chuyển khoảng và kiểu chart:
+ *  khung bo tròn chứa các nút, nút đang chọn nổi lên bằng màu chủ đạo. */
+const SEGMENT_GROUP = "rounded-full bg-muted p-1 gap-0";
+const SEGMENT_ITEM =
+  "h-8 rounded-full px-3 text-xs font-medium hover:bg-background/70 hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground";
 
 /** Popup biểu đồ giá theo ngày / tháng / năm — kiểu OKX, dùng chung Dialog với "Thêm lần mua". */
 export function PriceChartDialog({
@@ -54,7 +57,7 @@ export function PriceChartDialog({
   usdKrw: number | null;
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
-  const [chartType, setChartType] = useState<"line" | "bars">("line");
+  const [chartType, setChartType] = useState<"line" | "candles">("candles");
   const gradientId = useId();
   const coin = symbol ? getCoin(symbol) : undefined;
   const candles = useQuery({
@@ -66,9 +69,9 @@ export function PriceChartDialog({
   const points = candles.data?.points ?? [];
   const chart = useMemo(() => {
     if (points.length < 2) return null;
-    const values = points.map((p) => p.c);
-    let rawMin = Math.min(...values);
-    let rawMax = Math.max(...values);
+    // Miền giá theo cao/thấp thật của nến (bao cả giá đóng).
+    let rawMin = Math.min(...points.map((p) => p.l));
+    let rawMax = Math.max(...points.map((p) => p.h));
     if (rawMax === rawMin) {
       rawMin = rawMax * 0.999;
       rawMax = rawMax * 1.001;
@@ -87,32 +90,39 @@ export function PriceChartDialog({
       const value = rawMax - f * (rawMax - rawMin);
       return { value, y: y(value) };
     });
-    // Dạng cột xanh/đỏ: mỗi cột là giá đóng của một kỳ, cao từ đáy lên tới
-    // giá đó; xanh khi tăng so với kỳ trước, đỏ khi giảm.
-    const ups = columnUps(values);
+    // Nến: râu (cao→thấp) + thân (mở→đóng); xanh khi đóng >= mở, đỏ khi giảm.
+    // Nến doji (mở = đóng) thì thân cao 1px thành một gạch ngang.
     const plotW = W - PAD * 2 - LABEL_W;
     const bw = Math.max(2, (plotW / points.length) * 0.62);
-    const columns = points.map((p, i) => ({
-      x: x(i) - bw / 2,
-      y: y(p.c),
-      w: bw,
-      h: Math.max(1, H - y(p.c)),
-      up: ups[i] ?? true,
-    }));
+    const candleBars = points.map((p, i) => {
+      const cx = x(i);
+      const top = y(Math.max(p.o, p.c));
+      const bottom = y(Math.min(p.o, p.c));
+      return {
+        cx,
+        wickY1: y(p.h),
+        wickY2: y(p.l),
+        bodyX: cx - bw / 2,
+        bodyY: top,
+        bodyW: bw,
+        bodyH: Math.max(1, bottom - top),
+        up: candleIsUp(p),
+      };
+    });
     return {
       line,
       area,
       lastX: last ? x(points.length - 1) : 0,
       lastY: last ? y(last.c) : 0,
       ticks,
-      columns,
+      candleBars,
     };
   }, [points]);
   const change = candles.data?.changePct ?? null;
   const up = (change ?? 0) >= 0;
   const lastPrice = points.length > 0 ? (points[points.length - 1]?.c ?? null) : null;
-  const high = points.length > 0 ? Math.max(...points.map((p) => p.c)) : null;
-  const low = points.length > 0 ? Math.min(...points.map((p) => p.c)) : null;
+  const high = points.length > 0 ? Math.max(...points.map((p) => p.h)) : null;
+  const low = points.length > 0 ? Math.min(...points.map((p) => p.l)) : null;
   const unit = coin?.unit === "ounce" ? " / ounce" : "";
 
   return (
@@ -150,33 +160,37 @@ export function PriceChartDialog({
             <PnlText value={change} className="text-lg font-semibold">
               {change != null ? `${change >= 0 ? "+" : ""}${formatNumber(change, 2)}%` : "—"}
             </PnlText>
-            <ToggleGroup
-              type="single"
-              value={range}
-              onValueChange={(v) => v && setRange(v as ChartRange)}
-              className="mt-1.5 justify-end"
-            >
-              {RANGES.map((r) => (
-                <ToggleGroupItem key={r.value} value={r.value} className="h-7 px-3 text-xs">
-                  {r.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <ToggleGroup
-              type="single"
-              value={chartType}
-              onValueChange={(v) => v && setChartType(v as "line" | "bars")}
-              className="mt-1.5 justify-end"
-              aria-label="Kiểu biểu đồ"
-            >
-              <ToggleGroupItem value="line" className="h-7 px-3 text-xs">
-                Đường
-              </ToggleGroupItem>
-              <ToggleGroupItem value="bars" className="h-7 px-3 text-xs">
-                Cột
-              </ToggleGroupItem>
-            </ToggleGroup>
           </div>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+          <ToggleGroup
+            type="single"
+            value={range}
+            onValueChange={(v) => v && setRange(v as ChartRange)}
+            className={SEGMENT_GROUP}
+            aria-label="Khoảng thời gian"
+          >
+            {RANGES.map((r) => (
+              <ToggleGroupItem key={r.value} value={r.value} className={SEGMENT_ITEM}>
+                {r.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <ToggleGroup
+            type="single"
+            value={chartType}
+            onValueChange={(v) => v && setChartType(v as "line" | "candles")}
+            className={SEGMENT_GROUP}
+            aria-label="Kiểu biểu đồ"
+          >
+            <ToggleGroupItem value="line" className={SEGMENT_ITEM}>
+              Đường
+            </ToggleGroupItem>
+            <ToggleGroupItem value="candles" className={SEGMENT_ITEM}>
+              Nến
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         <div className="relative">
@@ -225,17 +239,26 @@ export function PriceChartDialog({
                   </text>
                 </g>
               ))}
-              {chartType === "bars" ? (
-                chart.columns.map((c, i) => (
-                  <rect
-                    key={i}
-                    x={c.x.toFixed(1)}
-                    y={c.y.toFixed(1)}
-                    width={c.w.toFixed(1)}
-                    height={c.h.toFixed(1)}
-                    rx="1.5"
-                    fill={c.up ? "var(--gain)" : "var(--loss)"}
-                  />
+              {chartType === "candles" ? (
+                chart.candleBars.map((c, i) => (
+                  <g key={i}>
+                    <line
+                      x1={c.cx.toFixed(1)}
+                      x2={c.cx.toFixed(1)}
+                      y1={c.wickY1.toFixed(1)}
+                      y2={c.wickY2.toFixed(1)}
+                      stroke={c.up ? "var(--gain)" : "var(--loss)"}
+                      strokeWidth="1.5"
+                    />
+                    <rect
+                      x={c.bodyX.toFixed(1)}
+                      y={c.bodyY.toFixed(1)}
+                      width={c.bodyW.toFixed(1)}
+                      height={c.bodyH.toFixed(1)}
+                      rx="1"
+                      fill={c.up ? "var(--gain)" : "var(--loss)"}
+                    />
+                  </g>
                 ))
               ) : (
                 <>

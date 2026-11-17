@@ -1,17 +1,65 @@
 import { describe, expect, it } from "vitest";
-import { columnUps } from "@/components/app/price-chart-dialog";
+import { candleIsUp } from "@/components/app/price-chart-dialog";
+import { bucketPricesToCandles } from "@/lib/prices.functions";
 
-describe("columnUps (biểu đồ cột xanh/đỏ)", () => {
-  it("xanh khi tăng, đỏ khi giảm so với kỳ trước", () => {
-    expect(columnUps([100, 110, 105, 120])).toEqual([true, true, false, true]);
+describe("candleIsUp (nến xanh/đỏ)", () => {
+  it("xanh khi đóng >= mở, đỏ khi đóng < mở", () => {
+    expect(candleIsUp({ t: 0, o: 100, h: 110, l: 90, c: 105 })).toBe(true);
+    expect(candleIsUp({ t: 0, o: 100, h: 110, l: 90, c: 95 })).toBe(false);
   });
 
-  it("cột đầu tiên theo xu hướng chung (không có kỳ trước để so)", () => {
-    expect(columnUps([100, 90, 80])).toEqual([false, false, false]);
-    expect(columnUps([100, 100])).toEqual([true, true]);
+  it("nến doji (đóng = mở) tính là xanh", () => {
+    expect(candleIsUp({ t: 0, o: 100, h: 100, l: 100, c: 100 })).toBe(true);
+  });
+});
+
+describe("bucketPricesToCandles (gom chuỗi giá thành nến OHLC)", () => {
+  it("mở = giá đầu, đóng = giá cuối, cao/thấp = max/min trong khung", () => {
+    const out = bucketPricesToCandles(
+      [
+        { t: 100, c: 10 },
+        { t: 1100, c: 12 },
+        { t: 1200, c: 9 },
+        { t: 2100, c: 15 },
+        { t: 2200, c: 14 },
+      ],
+      1000,
+    );
+    expect(out).toEqual([
+      { t: 100, o: 10, h: 10, l: 10, c: 10 },
+      { t: 1100, o: 12, h: 12, l: 9, c: 9 },
+      { t: 2100, o: 15, h: 15, l: 14, c: 14 },
+    ]);
+  });
+
+  it("sắp xếp theo thời gian trước khi gom (mở/đóng đúng thứ tự)", () => {
+    const out = bucketPricesToCandles(
+      [
+        { t: 1200, c: 9 },
+        { t: 100, c: 10 },
+        { t: 1100, c: 12 },
+      ],
+      1000,
+    );
+    expect(out).toEqual([
+      { t: 100, o: 10, h: 10, l: 10, c: 10 },
+      { t: 1100, o: 12, h: 12, l: 9, c: 9 },
+    ]);
+  });
+
+  it("bỏ điểm không hợp lệ (giá <= 0 hoặc không phải số)", () => {
+    const out = bucketPricesToCandles(
+      [
+        { t: 100, c: 0 },
+        { t: 200, c: NaN },
+        { t: 1100, c: 5 },
+      ],
+      1000,
+    );
+    expect(out).toEqual([{ t: 1100, o: 5, h: 5, l: 5, c: 5 }]);
   });
 
   it("rỗng thì rỗng", () => {
-    expect(columnUps([])).toEqual([]);
+    expect(bucketPricesToCandles([], 1000)).toEqual([]);
   });
 });

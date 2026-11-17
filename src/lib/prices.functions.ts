@@ -171,6 +171,12 @@ export type ChartRange = "1D" | "1M" | "1Y";
 export interface CandlePoint {
   /** Epoch ms. */
   t: number;
+  /** Open price in USD. */
+  o: number;
+  /** High price in USD. */
+  h: number;
+  /** Low price in USD. */
+  l: number;
   /** Close price in USD. */
   c: number;
 }
@@ -186,14 +192,30 @@ export interface CandlesResult {
 
 const CHART_ERR = "Không tải được biểu đồ. Vui lòng thử lại sau.";
 
-function downsample<T>(arr: T[], max: number): T[] {
-  if (arr.length <= max) return arr;
-  const step = arr.length / max;
-  const out: T[] = [];
-  for (let i = 0; i < max; i++) out.push(arr[Math.floor(i * step)] as T);
-  const last = arr[arr.length - 1] as T;
-  if (out[out.length - 1] !== last) out.push(last);
-  return out;
+/**
+ * Gom chuỗi giá [thời gian, giá] thành nến OHLC theo khung giờ bucketMs.
+ * Mở = giá đầu tiên, đóng = giá cuối cùng, cao/thấp = max/min trong khung.
+ * Dùng cho nguồn chỉ trả chuỗi giá (CoinGecko); OKX đã trả sẵn OHLC.
+ */
+export function bucketPricesToCandles(
+  rows: { t: number; c: number }[],
+  bucketMs: number,
+): CandlePoint[] {
+  const sorted = [...rows].sort((a, b) => a.t - b.t);
+  const buckets = new Map<number, CandlePoint>();
+  for (const p of sorted) {
+    if (!Number.isFinite(p.t) || !Number.isFinite(p.c) || p.c <= 0) continue;
+    const key = Math.floor(p.t / bucketMs);
+    const cur = buckets.get(key);
+    if (!cur) {
+      buckets.set(key, { t: p.t, o: p.c, h: p.c, l: p.c, c: p.c });
+    } else {
+      cur.h = Math.max(cur.h, p.c);
+      cur.l = Math.min(cur.l, p.c);
+      cur.c = p.c;
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.t - b.t);
 }
 
 /** OKX candlesticks (public, no key). Rows are newest-first: [ts, o, h, l, c, ...]. */
@@ -209,8 +231,21 @@ async function okxCandles(
   const rows = j.data ?? [];
   if (rows.length === 0) return null;
   const pts: CandlePoint[] = rows
-    .map((r) => ({ t: Number(r[0]), c: Number(r[4]) }))
-    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.c) && p.c > 0)
+    .map((r) => ({
+      t: Number(r[0]),
+      o: Number(r[1]),
+      h: Number(r[2]),
+      l: Number(r[3]),
+      c: Number(r[4]),
+    }))
+    .filter(
+      (p) =>
+        [p.t, p.o, p.h, p.l, p.c].every((v) => Number.isFinite(v)) &&
+        p.o > 0 &&
+        p.h > 0 &&
+        p.l > 0 &&
+        p.c > 0,
+    )
     .sort((a, b) => a.t - b.t);
   return pts.length > 0 ? pts : null;
 }
@@ -226,10 +261,15 @@ async function geckoCandles(
   );
   const rows = j.prices ?? [];
   if (rows.length === 0) return null;
-  const pts: CandlePoint[] = rows
-    .map(([t, c]) => ({ t, c }))
-    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.c) && p.c > 0);
-  return pts.length > 0 ? downsample(pts, 120) : null;
+  // CoinGecko chỉ trả chuỗi giá (không có OHLC) nên gom theo khung giờ
+  // trùng với khung nến OKX (1D→1 giờ, 1M→1 ngày, 1Y→1 tuần).
+  const bucketMs =
+    range === "1D" ? 3_600_000 : range === "1M" ? 86_400_000 : 604_800_000;
+  const pts = bucketPricesToCandles(
+    rows.map(([t, c]) => ({ t, c })),
+    bucketMs,
+  );
+  return pts.length > 0 ? pts : null;
 }
 
 /**
