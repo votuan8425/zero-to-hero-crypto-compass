@@ -150,13 +150,14 @@ function RootComponent() {
   const router = useRouter();
   // Màn hình chờ lúc mở app (dù đã đăng nhập hay chưa): logo + vòng xoay tròn,
   // hiện ít nhất 2 giây. Với tài khoản đã đăng nhập, màn hình chờ NẠP TOÀN BỘ
-  // dữ liệu app trước khi cho vào (giao dịch, hồ sơ, giá thị trường, danh mục
-  // tham khảo, nhà đầu tư đã đăng) — vào app rồi thì Trang chủ có sẵn dữ liệu,
-  // chuyển tab nào (Tích sản, Cá nhân, Tham khảo) cũng có sẵn, không phải chờ
-  // tải lần đầu. Chưa lấy xong thì ở ngoài màn hình chờ; chờ tối đa 15 giây
-  // để không kẹt mãi khi mạng yếu (quá 15s thì vẫn vào app với dữ liệu đã có /
-  // đã lưu, phần còn thiếu tự tải nốt trong nền). Chỉ chạy khi tải lại trang /
-  // mở app (component này chỉ mount một lần), không hiện lại khi chuyển tab.
+  // dữ liệu app VÀ CODE của tất cả tab trước khi cho vào (giao dịch, hồ sơ, giá
+  // thị trường, danh mục tham khảo, nhà đầu tư đã đăng + JS chunk của 4 tab) —
+  // vào app rồi thì Trang chủ có sẵn dữ liệu, chuyển tab nào (Tích sản, Cá nhân,
+  // Tham khảo) cũng có sẵn cả code lẫn dữ liệu, không phải chờ tải lần đầu.
+  // Chưa lấy xong thì ở ngoài màn hình chờ; chờ tối đa 15 giây để không kẹt mãi
+  // khi mạng yếu (quá 15s thì vẫn vào app với dữ liệu đã có / đã lưu, phần còn
+  // thiếu tự tải nốt trong nền). Chỉ chạy khi tải lại trang / mở app (component
+  // này chỉ mount một lần), không hiện lại khi chuyển tab.
   const [booted, setBooted] = useState(false);
 
   useEffect(() => {
@@ -184,6 +185,10 @@ function RootComponent() {
         if (userId) {
           // Nạp toàn bộ dữ liệu app song song trước khi cho vào — giao dịch,
           // hồ sơ, giá thị trường, danh mục tham khảo, nhà đầu tư đã đăng.
+          // Đồng thời nạp trước code (JS chunk) của tất cả tab bằng
+          // router.preloadRoute — lần đầu chuyển tab không phải tải chunk
+          // nên không chậm (chỉ prefetch dữ liệu thôi thì chưa đủ, vì mỗi tab
+          // là một chunk riêng, lần đầu vào tab nào cũng phải tải chunk đó).
           // allSettled: một nguồn lỗi cũng không chặn các nguồn khác.
           await Promise.race([
             Promise.allSettled([
@@ -196,6 +201,10 @@ function RootComponent() {
                 queryFn: fetchPublishedAllocations,
                 staleTime: 60_000,
               }),
+              router.preloadRoute({ to: "/trang-chu" }),
+              router.preloadRoute({ to: "/tich-san" }),
+              router.preloadRoute({ to: "/ca-nhan" }),
+              router.preloadRoute({ to: "/tham-khao" }),
             ]),
             sleep(15000),
           ]);
