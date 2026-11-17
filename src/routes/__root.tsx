@@ -14,7 +14,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SplashScreen } from "@/components/app/splash-screen";
 import { supabase } from "@/integrations/supabase/client";
-import { isNetworkError, profileQuery, transactionsQuery } from "@/lib/data";
+import { isNetworkError, profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
+import { fetchPublishedAllocations, publishedAllocationsKey } from "@/lib/admin-allocation";
+import { pricesQuery } from "@/hooks/use-app-data";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import appCss from "../styles.css?url";
@@ -147,10 +149,14 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   // Màn hình chờ lúc mở app (dù đã đăng nhập hay chưa): logo + vòng xoay tròn,
-  // hiện ít nhất 2 giây trong lúc dữ liệu của tài khoản đang được tải, rồi mới
-  // vào app. Chỉ chạy khi tải lại trang / mở app (component này chỉ mount một
-  // lần), không hiện lại khi chuyển tab trong app. Dù tải dữ liệu có lỗi thì
-  // vẫn vào app sau 2 giây — trang trong tự hiện trạng thái tải/lỗi của nó.
+  // hiện ít nhất 2 giây. Với tài khoản đã đăng nhập, màn hình chờ NẠP TOÀN BỘ
+  // dữ liệu app trước khi cho vào (giao dịch, hồ sơ, giá thị trường, danh mục
+  // tham khảo, nhà đầu tư đã đăng) — vào app rồi thì Trang chủ có sẵn dữ liệu,
+  // chuyển tab nào (Tích sản, Cá nhân, Tham khảo) cũng có sẵn, không phải chờ
+  // tải lần đầu. Chưa lấy xong thì ở ngoài màn hình chờ; chờ tối đa 15 giây
+  // để không kẹt mãi khi mạng yếu (quá 15s thì vẫn vào app với dữ liệu đã có /
+  // đã lưu, phần còn thiếu tự tải nốt trong nền). Chỉ chạy khi tải lại trang /
+  // mở app (component này chỉ mount một lần), không hiện lại khi chuyển tab.
   const [booted, setBooted] = useState(false);
 
   useEffect(() => {
@@ -176,12 +182,22 @@ function RootComponent() {
           if (s.session) userId = s.session.user.id;
         }
         if (userId) {
+          // Nạp toàn bộ dữ liệu app song song trước khi cho vào — giao dịch,
+          // hồ sơ, giá thị trường, danh mục tham khảo, nhà đầu tư đã đăng.
+          // allSettled: một nguồn lỗi cũng không chặn các nguồn khác.
           await Promise.race([
             Promise.allSettled([
               queryClient.prefetchQuery(transactionsQuery(userId)),
               queryClient.prefetchQuery(profileQuery(userId)),
+              queryClient.prefetchQuery(pricesQuery),
+              queryClient.prefetchQuery(referencesQuery(userId)),
+              queryClient.prefetchQuery({
+                queryKey: publishedAllocationsKey,
+                queryFn: fetchPublishedAllocations,
+                staleTime: 60_000,
+              }),
             ]),
-            sleep(8000),
+            sleep(15000),
           ]);
         }
       } catch {
