@@ -32,38 +32,70 @@ function ResetPasswordPage() {
 
   useEffect(() => {
     const isRecovery = window.location.hash.includes("type=recovery");
-    const { data } = supabase.auth.onAuthStateChange((event) => { if (event === "PASSWORD_RECOVERY") setReady(true); });
-    supabase.auth.getSession().then(({ data: s }) => { if (s.session && isRecovery) setReady(true); else if (s.session) setReady(true); });
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setReady(true);
+    });
+    supabase.auth.getSession().then(({ data: s }) => {
+      if (s.session && isRecovery) setReady(true);
+      else if (s.session) setReady(true);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) { toast.error("Hai mật khẩu không khớp."); return; }
+    if (password !== confirm) {
+      toast.error("Hai mật khẩu không khớp.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
-    if (error) { toast.error(translateAuthError(error)); return; }
+    if (error) {
+      toast.error(translateAuthError(error));
+      return;
+    }
     toast.success("Đã đặt lại mật khẩu thành công.");
     void navigate({ to: "/trang-chu", replace: true });
   }
 
   return (
     <div className="hero-glow flex min-h-screen flex-col items-center justify-center px-4">
-      <div className="mb-8"><BrandMark className="text-lg" /></div>
+      <div className="mb-8">
+        <BrandMark className="text-lg" />
+      </div>
       <div className="panel w-full max-w-md p-6 sm:p-8">
         <h1 className="text-xl font-bold">Đặt lại mật khẩu</h1>
         {!ready ? (
-          <p className="mt-3 text-sm text-muted-foreground">Đang xác minh liên kết… Nếu trang không tiếp tục, liên kết có thể đã hết hạn — hãy yêu cầu liên kết mới từ trang đăng nhập.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Đang xác minh liên kết… Nếu trang không tiếp tục, liên kết có thể đã hết hạn — hãy yêu
+            cầu liên kết mới từ trang đăng nhập.
+          </p>
         ) : (
           <form onSubmit={submit} className="mt-5 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="pw">Mật khẩu mới</Label>
-              <Input id="pw" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+              <Input
+                id="pw"
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pw2">Nhập lại mật khẩu mới</Label>
-              <Input id="pw2" type="password" required minLength={6} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+              <Input
+                id="pw2"
+                type="password"
+                required
+                minLength={6}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+              />
             </div>
             <Button type="submit" variant="hero" className="h-11 w-full" disabled={busy}>
               {busy && <Loader2 className="animate-spin" />} Lưu mật khẩu mới

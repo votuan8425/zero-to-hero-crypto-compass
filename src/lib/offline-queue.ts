@@ -2,7 +2,13 @@ import type { Tx } from "./portfolio";
 
 /** A pending change made while offline, replayed when the connection returns. */
 export type PendingOp =
-  | { kind: "upsert"; id: string; row: Tx & { user_id: string }; queuedAt: number; baseUpdatedAt: string | null }
+  | {
+      kind: "upsert";
+      id: string;
+      row: Tx & { user_id: string };
+      queuedAt: number;
+      baseUpdatedAt: string | null;
+    }
   | { kind: "delete"; id: string; queuedAt: number; baseUpdatedAt: string | null };
 
 const key = (userId: string) => `zth:queue:${userId}`;
@@ -49,7 +55,9 @@ export function applyPending(rows: Tx[], ops: PendingOp[]): Tx[] {
     if (op.kind === "delete") map.delete(op.id);
     else map.set(op.id, op.row);
   }
-  return [...map.values()].sort((a, b) => (a.tx_date < b.tx_date ? 1 : a.tx_date > b.tx_date ? -1 : 0));
+  return [...map.values()].sort((a, b) =>
+    a.tx_date < b.tx_date ? 1 : a.tx_date > b.tx_date ? -1 : 0,
+  );
 }
 
 export type ConflictDecision = "apply" | "skip-server-newer" | "skip-deleted";
@@ -60,7 +68,10 @@ export type ConflictDecision = "apply" | "skip-server-newer" | "skip-deleted";
  * offline edit, the newer server version wins. Edits to rows deleted
  * elsewhere are dropped. New rows always apply (idempotent by id).
  */
-export function decideConflict(op: PendingOp, server: { updated_at: string } | null): ConflictDecision {
+export function decideConflict(
+  op: PendingOp,
+  server: { updated_at: string } | null,
+): ConflictDecision {
   if (op.baseUpdatedAt === null) return "apply";
   if (!server) return op.kind === "delete" ? "apply" : "skip-deleted";
   const serverTime = new Date(server.updated_at).getTime();

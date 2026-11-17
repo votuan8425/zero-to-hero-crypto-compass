@@ -18,7 +18,8 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         hero: "rounded-full bg-primary font-semibold text-primary-foreground shadow-glow hover:bg-primary-glow",
         surface: "border border-border bg-surface-raised text-foreground hover:bg-accent",
-        google: "border border-google-border bg-google-bg font-medium text-google-text hover:bg-accent",
+        google:
+          "border border-google-border bg-google-bg font-medium text-google-text hover:bg-accent",
       },
       size: {
         default: "h-9 px-4 py-2",

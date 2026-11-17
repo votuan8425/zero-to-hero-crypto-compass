@@ -43,7 +43,10 @@ const BY_SYMBOL = new Map(COINS.map((c) => [c.symbol, c]));
 export const OTHER_SYMBOL = "KHAC";
 
 export function normalizeSymbol(raw: string): string {
-  const s = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const s = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
   if (["OTHER", "OTHERS", "KHAC", "CONLAI", "REST"].includes(s)) return OTHER_SYMBOL;
   if (s === "MATIC") return "POL";
   return s;

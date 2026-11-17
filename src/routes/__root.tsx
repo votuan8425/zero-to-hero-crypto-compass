@@ -87,9 +87,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#0b0b0b" },
       { title: "ZERO TO HERO — Tích sản tiền mã hoá" },
-      { name: "description", content: "Nền tảng tích sản và quản lý danh mục tiền mã hoá bằng tiếng Việt, đồng bộ đám mây trên mọi thiết bị." },
+      {
+        name: "description",
+        content:
+          "Nền tảng tích sản và quản lý danh mục tiền mã hoá bằng tiếng Việt, đồng bộ đám mây trên mọi thiết bị.",
+      },
       { property: "og:title", content: "ZERO TO HERO — Tích sản tiền mã hoá" },
-      { property: "og:description", content: "Một tài khoản. Nhiều thiết bị. Một danh mục đồng bộ." },
+      {
+        property: "og:description",
+        content: "Một tài khoản. Nhiều thiết bị. Một danh mục đồng bộ.",
+      },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "vi_VN" },
       { name: "twitter:card", content: "summary_large_image" },

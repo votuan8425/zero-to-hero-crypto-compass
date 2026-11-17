@@ -8,7 +8,8 @@ function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let bin = "";
   const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  for (let i = 0; i < bytes.length; i += chunk)
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
   return btoa(bin);
 }
 
@@ -33,7 +34,8 @@ export const analyzePortfolioImages = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<AnalyzeResult> => {
     const { supabase, userId } = context;
     for (const p of data.paths) {
-      if (!p.startsWith(`${userId}/`)) return { ok: false, status: 403, message: "Bạn không có quyền truy cập ảnh này." };
+      if (!p.startsWith(`${userId}/`))
+        return { ok: false, status: 403, message: "Bạn không có quyền truy cập ảnh này." };
     }
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) return { ok: false, status: 500, message: "Tính năng AI chưa được cấu hình." };
@@ -41,8 +43,15 @@ export const analyzePortfolioImages = createServerFn({ method: "POST" })
     const images: { dataUrl: string }[] = [];
     for (const p of data.paths) {
       const { data: blob, error } = await supabase.storage.from(REFERENCE_BUCKET).download(p);
-      if (error || !blob) return { ok: false, status: 404, message: "Không đọc được ảnh đã tải lên. Vui lòng tải lại ảnh." };
-      images.push({ dataUrl: `data:${mimeFor(p, blob.type)};base64,${toBase64(await blob.arrayBuffer())}` });
+      if (error || !blob)
+        return {
+          ok: false,
+          status: 404,
+          message: "Không đọc được ảnh đã tải lên. Vui lòng tải lại ảnh.",
+        };
+      images.push({
+        dataUrl: `data:${mimeFor(p, blob.type)};base64,${toBase64(await blob.arrayBuffer())}`,
+      });
     }
 
     try {
@@ -53,10 +62,13 @@ export const analyzePortfolioImages = createServerFn({ method: "POST" })
       const status = (e as { statusCode?: number })?.statusCode ?? 500;
       console.error("AI extraction failed", status, e);
       const message =
-        status === 429 ? "Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút."
-        : status === 402 ? "Đã hết hạn mức AI của không gian làm việc. Vui lòng nạp thêm để tiếp tục phân tích."
-        : status === 403 ? "Yêu cầu phân tích bị từ chối."
-        : "AI không phân tích được ảnh này. Bạn có thể nhập dữ liệu thủ công.";
+        status === 429
+          ? "Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút."
+          : status === 402
+            ? "Đã hết hạn mức AI của không gian làm việc. Vui lòng nạp thêm để tiếp tục phân tích."
+            : status === 403
+              ? "Yêu cầu phân tích bị từ chối."
+              : "AI không phân tích được ảnh này. Bạn có thể nhập dữ liệu thủ công.";
       return { ok: false, status, message };
     }
   });

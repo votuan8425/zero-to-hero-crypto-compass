@@ -17,7 +17,9 @@ import { Route as AuthenticatedCaNhanRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedTichSanRouteImport } from './routes/_authenticated/tich-san'
 import { Route as AuthenticatedTrangChuRouteImport } from './routes/_authenticated/trang-chu'
 import { Route as AuthenticatedThamKhaoIndexRouteImport } from './routes/_authenticated/tham-khao.index'
+import { Route as AuthenticatedThamKhaoIdRouteImport } from './routes/_authenticated/tham-khao.$id'
 import { Route as AuthenticatedThamKhaoMoiRouteImport } from './routes/_authenticated/tham-khao.moi'
+import { Route as AuthenticatedThamKhaoSoSanhRouteImport } from './routes/_authenticated/tham-khao.so-sanh'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,10 +61,21 @@ const AuthenticatedThamKhaoIndexRoute =
     path: '/tham-khao/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedThamKhaoIdRoute = AuthenticatedThamKhaoIdRouteImport.update({
+  id: '/tham-khao/$id',
+  path: '/tham-khao/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedThamKhaoMoiRoute =
   AuthenticatedThamKhaoMoiRouteImport.update({
     id: '/tham-khao/moi',
     path: '/tham-khao/moi',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedThamKhaoSoSanhRoute =
+  AuthenticatedThamKhaoSoSanhRouteImport.update({
+    id: '/tham-khao/so-sanh',
+    path: '/tham-khao/so-sanh',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
@@ -73,7 +86,9 @@ export interface FileRoutesByFullPath {
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
   '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRoutesByTo {
@@ -83,7 +98,9 @@ export interface FileRoutesByTo {
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
   '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/tham-khao': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRoutesById {
@@ -95,7 +112,9 @@ export interface FileRoutesById {
   '/_authenticated/ca-nhan': typeof AuthenticatedCaNhanRoute
   '/_authenticated/tich-san': typeof AuthenticatedTichSanRoute
   '/_authenticated/trang-chu': typeof AuthenticatedTrangChuRoute
+  '/_authenticated/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
   '/_authenticated/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
+  '/_authenticated/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/_authenticated/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
 }
 export interface FileRouteTypes {
@@ -107,7 +126,9 @@ export interface FileRouteTypes {
     | '/ca-nhan'
     | '/tich-san'
     | '/trang-chu'
+    | '/tham-khao/$id'
     | '/tham-khao/moi'
+    | '/tham-khao/so-sanh'
     | '/tham-khao/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -117,7 +138,9 @@ export interface FileRouteTypes {
     | '/ca-nhan'
     | '/tich-san'
     | '/trang-chu'
+    | '/tham-khao/$id'
     | '/tham-khao/moi'
+    | '/tham-khao/so-sanh'
     | '/tham-khao'
   id:
     | '__root__'
@@ -128,7 +151,9 @@ export interface FileRouteTypes {
     | '/_authenticated/ca-nhan'
     | '/_authenticated/tich-san'
     | '/_authenticated/trang-chu'
+    | '/_authenticated/tham-khao/$id'
     | '/_authenticated/tham-khao/moi'
+    | '/_authenticated/tham-khao/so-sanh'
     | '/_authenticated/tham-khao/'
   fileRoutesById: FileRoutesById
 }
@@ -197,11 +222,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedThamKhaoIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tham-khao/$id': {
+      id: '/_authenticated/tham-khao/$id'
+      path: '/tham-khao/$id'
+      fullPath: '/tham-khao/$id'
+      preLoaderRoute: typeof AuthenticatedThamKhaoIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tham-khao/moi': {
       id: '/_authenticated/tham-khao/moi'
       path: '/tham-khao/moi'
       fullPath: '/tham-khao/moi'
       preLoaderRoute: typeof AuthenticatedThamKhaoMoiRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tham-khao/so-sanh': {
+      id: '/_authenticated/tham-khao/so-sanh'
+      path: '/tham-khao/so-sanh'
+      fullPath: '/tham-khao/so-sanh'
+      preLoaderRoute: typeof AuthenticatedThamKhaoSoSanhRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -211,7 +250,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaNhanRoute: typeof AuthenticatedCaNhanRoute
   AuthenticatedTichSanRoute: typeof AuthenticatedTichSanRoute
   AuthenticatedTrangChuRoute: typeof AuthenticatedTrangChuRoute
+  AuthenticatedThamKhaoIdRoute: typeof AuthenticatedThamKhaoIdRoute
   AuthenticatedThamKhaoMoiRoute: typeof AuthenticatedThamKhaoMoiRoute
+  AuthenticatedThamKhaoSoSanhRoute: typeof AuthenticatedThamKhaoSoSanhRoute
   AuthenticatedThamKhaoIndexRoute: typeof AuthenticatedThamKhaoIndexRoute
 }
 
@@ -219,7 +260,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaNhanRoute: AuthenticatedCaNhanRoute,
   AuthenticatedTichSanRoute: AuthenticatedTichSanRoute,
   AuthenticatedTrangChuRoute: AuthenticatedTrangChuRoute,
+  AuthenticatedThamKhaoIdRoute: AuthenticatedThamKhaoIdRoute,
   AuthenticatedThamKhaoMoiRoute: AuthenticatedThamKhaoMoiRoute,
+  AuthenticatedThamKhaoSoSanhRoute: AuthenticatedThamKhaoSoSanhRoute,
   AuthenticatedThamKhaoIndexRoute: AuthenticatedThamKhaoIndexRoute,
 }
 

@@ -2,12 +2,30 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, CloudUpload, Download, KeyRound, Loader2, LogOut, RefreshCw, Upload, UserRound, Wifi, WifiOff } from "lucide-react";
+import {
+  CheckCircle2,
+  CloudUpload,
+  Download,
+  KeyRound,
+  Loader2,
+  LogOut,
+  RefreshCw,
+  Upload,
+  UserRound,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader } from "@/components/app/app-shell";
 import { useSync } from "@/components/app/sync-provider";
 import { useProfile, useReferences, useTransactions } from "@/hooks/use-app-data";
@@ -23,7 +41,10 @@ export const Route = createFileRoute("/_authenticated/ca-nhan")({
   head: () => ({
     meta: [
       { title: "Cá nhân — ZERO TO HERO" },
-      { name: "description", content: "Tài khoản, cài đặt, đồng bộ, sao lưu và khôi phục dữ liệu." },
+      {
+        name: "description",
+        content: "Tài khoản, cài đặt, đồng bộ, sao lưu và khôi phục dữ liệu.",
+      },
       { property: "og:title", content: "Cá nhân — ZERO TO HERO" },
       { property: "og:description", content: "Quản lý tài khoản và dữ liệu của bạn." },
       { property: "og:type", content: "website" },
@@ -33,11 +54,25 @@ export const Route = createFileRoute("/_authenticated/ca-nhan")({
   component: PersonalPage,
 });
 
-function Section({ id, icon, title, description, children }: { id?: string; icon: React.ReactNode; title: string; description?: string; children: React.ReactNode }) {
+function Section({
+  id,
+  icon,
+  title,
+  description,
+  children,
+}: {
+  id?: string;
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section id={id} className="panel scroll-mt-24 p-5">
       <div className="mb-4 flex items-start gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-raised text-primary">{icon}</div>
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-raised text-primary">
+          {icon}
+        </div>
         <div>
           <h2 className="font-semibold">{title}</h2>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
@@ -61,7 +96,10 @@ function PersonalPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (profile) { setName(profile.display_name ?? ""); setCurrency(profile.currency); }
+    if (profile) {
+      setName(profile.display_name ?? "");
+      setCurrency(profile.currency);
+    }
   }, [profile]);
 
   async function saveProfile(e: React.FormEvent) {
@@ -91,35 +129,76 @@ function PersonalPage() {
     <div>
       <PageHeader title="Cá nhân" subtitle={user.email ?? undefined} />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section icon={<UserRound className="h-4 w-4" />} title="Tài khoản" description={`Đăng nhập bằng ${provider === "google" ? "Google" : provider === "email" ? "email" : provider}. Tham gia từ ${formatDate(new Date(user.created_at))}.`}>
+        <Section
+          icon={<UserRound className="h-4 w-4" />}
+          title="Tài khoản"
+          description={`Đăng nhập bằng ${provider === "google" ? "Google" : provider === "email" ? "email" : provider}. Tham gia từ ${formatDate(new Date(user.created_at))}.`}
+        >
           <form onSubmit={saveProfile} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="dn">Tên hiển thị</Label>
-              <Input id="dn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên của bạn" />
+              <Input
+                id="dn"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Tên của bạn"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Đơn vị tiền tệ hiển thị</Label>
               <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="VND">Việt Nam Đồng (₫)</SelectItem>
                   <SelectItem value="USD">Đô la Mỹ ($)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" variant="hero" disabled={saving}>{saving && <Loader2 className="animate-spin" />} Lưu cài đặt</Button>
+            <Button type="submit" variant="hero" disabled={saving}>
+              {saving && <Loader2 className="animate-spin" />} Lưu cài đặt
+            </Button>
           </form>
         </Section>
 
-        <Section icon={sync.online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />} title="Đồng bộ đám mây" description="Dữ liệu tự động đồng bộ trên mọi thiết bị đăng nhập cùng tài khoản.">
+        <Section
+          icon={sync.online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+          title="Đồng bộ đám mây"
+          description="Dữ liệu tự động đồng bộ trên mọi thiết bị đăng nhập cùng tài khoản."
+        >
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-surface-raised p-3"><dt className="text-xs text-muted-foreground">Kết nối</dt><dd className={sync.online ? "font-medium text-gain" : "font-medium text-warning"}>{sync.online ? "Trực tuyến" : "Ngoại tuyến"}</dd></div>
-            <div className="rounded-lg bg-surface-raised p-3"><dt className="text-xs text-muted-foreground">Thời gian thực</dt><dd className="font-medium">{sync.realtime ? "Đang bật" : "Đang kết nối…"}</dd></div>
-            <div className="rounded-lg bg-surface-raised p-3"><dt className="text-xs text-muted-foreground">Chờ đồng bộ</dt><dd className="num font-medium">{sync.pending} thay đổi</dd></div>
-            <div className="rounded-lg bg-surface-raised p-3"><dt className="text-xs text-muted-foreground">Lần đồng bộ cuối</dt><dd className="font-medium">{sync.lastSyncedAt ? formatDateTime(sync.lastSyncedAt) : "—"}</dd></div>
+            <div className="rounded-lg bg-surface-raised p-3">
+              <dt className="text-xs text-muted-foreground">Kết nối</dt>
+              <dd className={sync.online ? "font-medium text-gain" : "font-medium text-warning"}>
+                {sync.online ? "Trực tuyến" : "Ngoại tuyến"}
+              </dd>
+            </div>
+            <div className="rounded-lg bg-surface-raised p-3">
+              <dt className="text-xs text-muted-foreground">Thời gian thực</dt>
+              <dd className="font-medium">{sync.realtime ? "Đang bật" : "Đang kết nối…"}</dd>
+            </div>
+            <div className="rounded-lg bg-surface-raised p-3">
+              <dt className="text-xs text-muted-foreground">Chờ đồng bộ</dt>
+              <dd className="num font-medium">{sync.pending} thay đổi</dd>
+            </div>
+            <div className="rounded-lg bg-surface-raised p-3">
+              <dt className="text-xs text-muted-foreground">Lần đồng bộ cuối</dt>
+              <dd className="font-medium">
+                {sync.lastSyncedAt ? formatDateTime(sync.lastSyncedAt) : "—"}
+              </dd>
+            </div>
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">Trên đám mây: {txs.data?.length ?? 0} giao dịch · {refs.data?.length ?? 0} danh mục tham khảo.</p>
-          <Button variant="surface" className="mt-4" disabled={!sync.online || sync.syncing} onClick={() => void sync.syncNow()}>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Trên đám mây: {txs.data?.length ?? 0} giao dịch · {refs.data?.length ?? 0} danh mục tham
+            khảo.
+          </p>
+          <Button
+            variant="surface"
+            className="mt-4"
+            disabled={!sync.online || sync.syncing}
+            onClick={() => void sync.syncNow()}
+          >
             <RefreshCw className={sync.syncing ? "animate-spin" : ""} /> Đồng bộ ngay
           </Button>
         </Section>
@@ -128,110 +207,195 @@ function PersonalPage() {
         <BackupSection />
         {provider === "email" && <PasswordSection email={user.email ?? ""} />}
 
-        <Section icon={<LogOut className="h-4 w-4" />} title="Đăng xuất" description="Dữ liệu vẫn an toàn trên đám mây. Đăng nhập lại để tiếp tục trên bất kỳ thiết bị nào.">
-          {sync.pending > 0 && <p className="mb-3 text-sm text-warning">Còn {sync.pending} thay đổi chưa đồng bộ. Hãy kết nối mạng trước khi đăng xuất để không mất dữ liệu.</p>}
-          <Button variant="destructive" onClick={() => void signOut()}><LogOut /> Đăng xuất</Button>
+        <Section
+          icon={<LogOut className="h-4 w-4" />}
+          title="Đăng xuất"
+          description="Dữ liệu vẫn an toàn trên đám mây. Đăng nhập lại để tiếp tục trên bất kỳ thiết bị nào."
+        >
+          {sync.pending > 0 && (
+            <p className="mb-3 text-sm text-warning">
+              Còn {sync.pending} thay đổi chưa đồng bộ. Hãy kết nối mạng trước khi đăng xuất để
+              không mất dữ liệu.
+            </p>
+          )}
+          <Button variant="destructive" onClick={() => void signOut()}>
+            <LogOut /> Đăng xuất
+          </Button>
         </Section>
       </div>
     </div>
   );
 }
 
-  function BackupSection() {
-    const user = useUser();
-    const qc = useQueryClient();
-    const { data: profile } = useProfile();
-    const txs = useTransactions();
-    const refs = useReferences();
-    const sync = useSync();
-    const fileRef = useRef<HTMLInputElement>(null);
-    const [busy, setBusy] = useState(false);
-    async function onRestore(file: File) {
-      setBusy(true);
-      try {
-        const backup = parseBackup(await file.text());
-        const res = await restoreBackup(user.id, backup, new Set((txs.data ?? []).map((t) => t.id)), refs.data ?? []);
-        await qc.invalidateQueries({ queryKey: txKey(user.id) });
-        await qc.invalidateQueries({ queryKey: refsKey(user.id) });
-        await qc.invalidateQueries({ queryKey: profileKey(user.id) });
-        toast.success(`Đã khôi phục ${res.txInserted} giao dịch và ${res.refsInserted} danh mục tham khảo. Bỏ qua ${res.txSkipped} giao dịch đã có.`);
-      } catch (e) {
-        toast.error(e instanceof Error && e.message.startsWith("Tệp") ? e.message : "Không khôi phục được dữ liệu từ tệp này.");
-      } finally {
-        setBusy(false);
-        if (fileRef.current) fileRef.current.value = "";
-      }
+function BackupSection() {
+  const user = useUser();
+  const qc = useQueryClient();
+  const { data: profile } = useProfile();
+  const txs = useTransactions();
+  const refs = useReferences();
+  const sync = useSync();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  async function onRestore(file: File) {
+    setBusy(true);
+    try {
+      const backup = parseBackup(await file.text());
+      const res = await restoreBackup(
+        user.id,
+        backup,
+        new Set((txs.data ?? []).map((t) => t.id)),
+        refs.data ?? [],
+      );
+      await qc.invalidateQueries({ queryKey: txKey(user.id) });
+      await qc.invalidateQueries({ queryKey: refsKey(user.id) });
+      await qc.invalidateQueries({ queryKey: profileKey(user.id) });
+      toast.success(
+        `Đã khôi phục ${res.txInserted} giao dịch và ${res.refsInserted} danh mục tham khảo. Bỏ qua ${res.txSkipped} giao dịch đã có.`,
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof Error && e.message.startsWith("Tệp")
+          ? e.message
+          : "Không khôi phục được dữ liệu từ tệp này.",
+      );
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-    return (
-      <Section icon={<Download className="h-4 w-4" />} title="Sao lưu & khôi phục" description="Tải toàn bộ dữ liệu cá nhân về máy, hoặc khôi phục từ tệp sao lưu. Giao dịch trùng sẽ tự động được bỏ qua.">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="surface" onClick={() => downloadJson(`zero-to-hero-sao-luu-${todayKey()}.json`, buildBackup(profile, txs.data ?? [], refs.data ?? []))}><Download /> Xuất dữ liệu</Button>
-          <Button variant="surface" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} Khôi phục từ tệp</Button>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && void onRestore(e.target.files[0])} />
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">Ảnh chụp danh mục tham khảo không nằm trong tệp sao lưu; chúng được lưu riêng tư trên đám mây.</p>
-      </Section>
-    );
   }
+  return (
+    <Section
+      icon={<Download className="h-4 w-4" />}
+      title="Sao lưu & khôi phục"
+      description="Tải toàn bộ dữ liệu cá nhân về máy, hoặc khôi phục từ tệp sao lưu. Giao dịch trùng sẽ tự động được bỏ qua."
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="surface"
+          onClick={() =>
+            downloadJson(
+              `zero-to-hero-sao-luu-${todayKey()}.json`,
+              buildBackup(profile, txs.data ?? [], refs.data ?? []),
+            )
+          }
+        >
+          <Download /> Xuất dữ liệu
+        </Button>
+        <Button variant="surface" disabled={busy} onClick={() => fileRef.current?.click()}>
+          {busy ? <Loader2 className="animate-spin" /> : <Upload />} Khôi phục từ tệp
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(e) => e.target.files?.[0] && void onRestore(e.target.files[0])}
+        />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Ảnh chụp danh mục tham khảo không nằm trong tệp sao lưu; chúng được lưu riêng tư trên đám
+        mây.
+      </p>
+    </Section>
+  );
+}
 
-  function LegacyMigration() {
-    const user = useUser();
-    const qc = useQueryClient();
-    const { data: profile } = useProfile();
-    const txs = useTransactions();
-    const refs = useReferences();
-    const sync = useSync();
-    const scan = useQuery({ queryKey: ["legacy-scan"], queryFn: scanLegacyData, staleTime: Infinity });
-    const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState<{ expected: number; found: number } | null>(null);
-    const records = scan.data ?? [];
-    async function run() {
-      setBusy(true);
-      try {
-        const res = await importLegacy(user.id, records);
-        setResult(res);
-        await qc.invalidateQueries({ queryKey: txKey(user.id) });
-        if (res.found >= res.expected) {
-          await updateProfile(user.id, { local_migrated_at: new Date().toISOString() });
-          await qc.invalidateQueries({ queryKey: profileKey(user.id) });
-          toast.success(`Đã chuyển và xác minh ${res.found}/${res.expected} giao dịch lên đám mây.`);
-        } else {
-          toast.warning(`Mới xác minh được ${res.found}/${res.expected} giao dịch. Dữ liệu cũ vẫn được giữ nguyên, bạn có thể thử lại.`);
-        }
-      } catch {
-        toast.error("Chuyển dữ liệu thất bại. Dữ liệu cũ trên trình duyệt vẫn được giữ nguyên.");
-      } finally {
-        setBusy(false);
+function LegacyMigration() {
+  const user = useUser();
+  const qc = useQueryClient();
+  const { data: profile } = useProfile();
+  const txs = useTransactions();
+  const refs = useReferences();
+  const sync = useSync();
+  const scan = useQuery({
+    queryKey: ["legacy-scan"],
+    queryFn: scanLegacyData,
+    staleTime: Infinity,
+  });
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ expected: number; found: number } | null>(null);
+  const records = scan.data ?? [];
+  async function run() {
+    setBusy(true);
+    try {
+      const res = await importLegacy(user.id, records);
+      setResult(res);
+      await qc.invalidateQueries({ queryKey: txKey(user.id) });
+      if (res.found >= res.expected) {
+        await updateProfile(user.id, { local_migrated_at: new Date().toISOString() });
+        await qc.invalidateQueries({ queryKey: profileKey(user.id) });
+        toast.success(`Đã chuyển và xác minh ${res.found}/${res.expected} giao dịch lên đám mây.`);
+      } else {
+        toast.warning(
+          `Mới xác minh được ${res.found}/${res.expected} giao dịch. Dữ liệu cũ vẫn được giữ nguyên, bạn có thể thử lại.`,
+        );
       }
+    } catch {
+      toast.error("Chuyển dữ liệu thất bại. Dữ liệu cũ trên trình duyệt vẫn được giữ nguyên.");
+    } finally {
+      setBusy(false);
     }
-    return (
-      <Section id="chuyen-du-lieu" icon={<CloudUpload className="h-4 w-4" />} title="Chuyển dữ liệu cũ lên đám mây" description="Quét bộ nhớ trình duyệt này để tìm giao dịch từ phiên bản cũ và đưa lên tài khoản của bạn. Dữ liệu gốc được giữ nguyên.">
-        {scan.isLoading ? (
-          <p className="text-sm text-muted-foreground">Đang quét…</p>
-        ) : records.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Không tìm thấy dữ liệu cũ trên trình duyệt này.{profile?.local_migrated_at ? ` Đã chuyển lần cuối: ${formatDateTime(profile.local_migrated_at)}.` : ""}</p>
-        ) : (
-          <>
-            <p className="text-sm">Tìm thấy <b className="num">{records.length}</b> giao dịch:</p>
-            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg bg-surface-raised p-3 text-xs">
-              {records.slice(0, 50).map((r) => (
-                <li key={r.importKey} className="num flex justify-between gap-2"><span>{formatDate(r.tx_date)} · {formatNumber(r.quantity)} {displaySymbol(r.symbol)}</span><span className="truncate text-muted-foreground">{r.source}</span></li>
-              ))}
-            </ul>
-            {result && (
-              <p className={`mt-3 flex items-center gap-2 text-sm ${result.found >= result.expected ? "text-gain" : "text-warning"}`}>
-                <CheckCircle2 className="h-4 w-4" /> Đã xác minh {result.found}/{result.expected} giao dịch trên đám mây.
-              </p>
-            )}
-            <Button variant="hero" className="mt-4" disabled={busy || !sync.online} onClick={() => void run()}>
-              {busy ? <Loader2 className="animate-spin" /> : <CloudUpload />} {profile?.local_migrated_at ? "Chuyển lại (bỏ qua bản trùng)" : "Chuyển lên đám mây"}
-            </Button>
-          </>
-        )}
-        <Button variant="link" className="mt-1 h-auto px-0 text-xs" onClick={() => void scan.refetch()}>Quét lại</Button>
-      </Section>
-    );
   }
+  return (
+    <Section
+      id="chuyen-du-lieu"
+      icon={<CloudUpload className="h-4 w-4" />}
+      title="Chuyển dữ liệu cũ lên đám mây"
+      description="Quét bộ nhớ trình duyệt này để tìm giao dịch từ phiên bản cũ và đưa lên tài khoản của bạn. Dữ liệu gốc được giữ nguyên."
+    >
+      {scan.isLoading ? (
+        <p className="text-sm text-muted-foreground">Đang quét…</p>
+      ) : records.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Không tìm thấy dữ liệu cũ trên trình duyệt này.
+          {profile?.local_migrated_at
+            ? ` Đã chuyển lần cuối: ${formatDateTime(profile.local_migrated_at)}.`
+            : ""}
+        </p>
+      ) : (
+        <>
+          <p className="text-sm">
+            Tìm thấy <b className="num">{records.length}</b> giao dịch:
+          </p>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg bg-surface-raised p-3 text-xs">
+            {records.slice(0, 50).map((r) => (
+              <li key={r.importKey} className="num flex justify-between gap-2">
+                <span>
+                  {formatDate(r.tx_date)} · {formatNumber(r.quantity)} {displaySymbol(r.symbol)}
+                </span>
+                <span className="truncate text-muted-foreground">{r.source}</span>
+              </li>
+            ))}
+          </ul>
+          {result && (
+            <p
+              className={`mt-3 flex items-center gap-2 text-sm ${result.found >= result.expected ? "text-gain" : "text-warning"}`}
+            >
+              <CheckCircle2 className="h-4 w-4" /> Đã xác minh {result.found}/{result.expected} giao
+              dịch trên đám mây.
+            </p>
+          )}
+          <Button
+            variant="hero"
+            className="mt-4"
+            disabled={busy || !sync.online}
+            onClick={() => void run()}
+          >
+            {busy ? <Loader2 className="animate-spin" /> : <CloudUpload />}{" "}
+            {profile?.local_migrated_at ? "Chuyển lại (bỏ qua bản trùng)" : "Chuyển lên đám mây"}
+          </Button>
+        </>
+      )}
+      <Button
+        variant="link"
+        className="mt-1 h-auto px-0 text-xs"
+        onClick={() => void scan.refetch()}
+      >
+        Quét lại
+      </Button>
+    </Section>
+  );
+}
 
 function PasswordSection({ email }: { email: string }) {
   const [current, setCurrent] = useState("");
@@ -239,31 +403,76 @@ function PasswordSection({ email }: { email: string }) {
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (next.length < 6) return toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.");
+    if (next.length < 6) {
+      toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password: next, current_password: current } as { password: string });
+    const { error } = await supabase.auth.updateUser({
+      password: next,
+      current_password: current,
+    } as { password: string });
     setBusy(false);
-    if (error) return toast.error(translateAuthError(error));
-    setCurrent(""); setNext("");
+    if (error) {
+      toast.error(translateAuthError(error));
+      return;
+    }
+    setCurrent("");
+    setNext("");
     toast.success("Đã đổi mật khẩu.");
   }
   async function sendReset() {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     if (error) toast.error(translateAuthError(error));
     else toast.success("Đã gửi email đặt lại mật khẩu.");
   }
   return (
     <section className="panel p-5">
       <div className="mb-4 flex items-start gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-raised text-primary"><KeyRound className="h-4 w-4" /></div>
-        <div><h2 className="font-semibold">Đổi mật khẩu</h2><p className="text-sm text-muted-foreground">Bảo vệ tài khoản bằng mật khẩu mạnh.</p></div>
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-raised text-primary">
+          <KeyRound className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="font-semibold">Đổi mật khẩu</h2>
+          <p className="text-sm text-muted-foreground">Bảo vệ tài khoản bằng mật khẩu mạnh.</p>
+        </div>
       </div>
       <form onSubmit={submit} className="space-y-3">
-        <div className="space-y-1.5"><Label htmlFor="cur">Mật khẩu hiện tại</Label><Input id="cur" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required /></div>
-        <div className="space-y-1.5"><Label htmlFor="new">Mật khẩu mới</Label><Input id="new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required /></div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cur">Mật khẩu hiện tại</Label>
+          <Input
+            id="cur"
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="new">Mật khẩu mới</Label>
+          <Input
+            id="new"
+            type="password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="surface" disabled={busy}>{busy && <Loader2 className="animate-spin" />} Đổi mật khẩu</Button>
-          <button type="button" onClick={() => void sendReset()} className="text-xs text-primary hover:underline">Quên mật khẩu hiện tại?</button>
+          <Button type="submit" variant="surface" disabled={busy}>
+            {busy && <Loader2 className="animate-spin" />} Đổi mật khẩu
+          </Button>
+          <button
+            type="button"
+            onClick={() => void sendReset()}
+            className="text-xs text-primary hover:underline"
+          >
+            Quên mật khẩu hiện tại?
+          </button>
         </div>
       </form>
     </section>

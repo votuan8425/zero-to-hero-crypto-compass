@@ -1,7 +1,14 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
-import { applyPending, decideConflict, enqueue, readQueue, writeQueue, type PendingOp } from "./offline-queue";
+import type { Json, Tables } from "@/integrations/supabase/types";
+import {
+  applyPending,
+  decideConflict,
+  enqueue,
+  readQueue,
+  writeQueue,
+  type PendingOp,
+} from "./offline-queue";
 import type { Tx } from "./portfolio";
 import type { RefHolding } from "./reference";
 import type { Currency } from "./format";
@@ -33,24 +40,44 @@ export interface ReferencePortfolio {
 const snapshotKey = (kind: string, userId: string) => `zth:cache:${kind}:${userId}`;
 
 function saveSnapshot(kind: string, userId: string, data: unknown) {
-  try { localStorage.setItem(snapshotKey(kind, userId), JSON.stringify(data)); } catch { /* quota */ }
+  try {
+    localStorage.setItem(snapshotKey(kind, userId), JSON.stringify(data));
+  } catch {
+    /* quota */
+  }
 }
 function readSnapshot<T>(kind: string, userId: string): T | null {
-  try { const raw = localStorage.getItem(snapshotKey(kind, userId)); return raw ? (JSON.parse(raw) as T) : null; } catch { return null; }
+  try {
+    const raw = localStorage.getItem(snapshotKey(kind, userId));
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isNetworkError(e: unknown): boolean {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
-  const msg = e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e);
+  const msg =
+    e instanceof Error
+      ? e.message
+      : typeof e === "object" && e && "message" in e
+        ? String((e as { message: unknown }).message)
+        : String(e);
   return /failed to fetch|networkerror|network request failed|load failed|fetch failed/i.test(msg);
 }
 
-function normalizeTx(r: Record<string, unknown>): Tx {
+function normalizeTx(r: Tables<"transactions">): Tx {
   return {
-    id: String(r.id), symbol: String(r.symbol), coin_name: String(r.coin_name),
-    quantity: Number(r.quantity), price_usd: Number(r.price_usd), fee_usd: Number(r.fee_usd ?? 0),
-    tx_date: String(r.tx_date), note: (r.note as string | null) ?? null,
-    updated_at: r.updated_at as string | undefined, created_at: r.created_at as string | undefined,
+    id: r.id,
+    symbol: r.symbol,
+    coin_name: r.coin_name,
+    quantity: Number(r.quantity),
+    price_usd: Number(r.price_usd),
+    fee_usd: Number(r.fee_usd ?? 0),
+    tx_date: r.tx_date,
+    note: r.note ?? null,
+    updated_at: r.updated_at,
+    created_at: r.created_at,
   };
 }
 
@@ -64,9 +91,14 @@ export const transactionsQuery = (userId: string) =>
     queryFn: async (): Promise<Tx[]> => {
       let rows: Tx[];
       try {
-        const { data, error } = await supabase.from("transactions").select("*").order("tx_date", { ascending: false }).order("created_at", { ascending: false }).limit(5000);
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .order("tx_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(5000);
         if (error) throw error;
-        rows = (data ?? []).map((r) => normalizeTx(r as Record<string, unknown>));
+        rows = (data ?? []).map(normalizeTx);
         saveSnapshot("tx", userId, rows);
       } catch (e) {
         const snap = readSnapshot<Tx[]>("tx", userId);
@@ -80,12 +112,25 @@ export const transactionsQuery = (userId: string) =>
 export type TxInput = Omit<Tx, "id" | "updated_at" | "created_at">;
 
 /** Saves a purchase. Writes to the cloud immediately, or queues it when offline. Returns "synced" | "queued". */
-export async function saveTransaction(qc: QueryClient, userId: string, input: TxInput, existing?: Tx): Promise<"synced" | "queued"> {
+export async function saveTransaction(
+  qc: QueryClient,
+  userId: string,
+  input: TxInput,
+  existing?: Tx,
+): Promise<"synced" | "queued"> {
   const id = existing?.id ?? crypto.randomUUID();
   const row = { ...input, id, user_id: userId };
-  qc.setQueryData<Tx[]>(txKey(userId), (old = []) => applyPending(old, [{ kind: "upsert", id, row, queuedAt: Date.now(), baseUpdatedAt: null }]));
+  qc.setQueryData<Tx[]>(txKey(userId), (old = []) =>
+    applyPending(old, [{ kind: "upsert", id, row, queuedAt: Date.now(), baseUpdatedAt: null }]),
+  );
   const queue = () => {
-    enqueue(userId, { kind: "upsert", id, row, queuedAt: Date.now(), baseUpdatedAt: existing ? existing.updated_at ?? null : null });
+    enqueue(userId, {
+      kind: "upsert",
+      id,
+      row,
+      queuedAt: Date.now(),
+      baseUpdatedAt: existing ? (existing.updated_at ?? null) : null,
+    });
     return "queued" as const;
   };
   if (typeof navigator !== "undefined" && !navigator.onLine) return queue();
@@ -99,10 +144,19 @@ export async function saveTransaction(qc: QueryClient, userId: string, input: Tx
   return "synced";
 }
 
-export async function deleteTransaction(qc: QueryClient, userId: string, tx: Tx): Promise<"synced" | "queued"> {
+export async function deleteTransaction(
+  qc: QueryClient,
+  userId: string,
+  tx: Tx,
+): Promise<"synced" | "queued"> {
   qc.setQueryData<Tx[]>(txKey(userId), (old = []) => old.filter((t) => t.id !== tx.id));
   const queue = () => {
-    enqueue(userId, { kind: "delete", id: tx.id, queuedAt: Date.now(), baseUpdatedAt: tx.updated_at ?? null });
+    enqueue(userId, {
+      kind: "delete",
+      id: tx.id,
+      queuedAt: Date.now(),
+      baseUpdatedAt: tx.updated_at ?? null,
+    });
     return "queued" as const;
   };
   if (typeof navigator !== "undefined" && !navigator.onLine) return queue();
@@ -129,29 +183,44 @@ export function flushQueue(userId: string): Promise<{ applied: number; conflicts
       try {
         let server: { updated_at: string } | null = null;
         if (op.baseUpdatedAt !== null) {
-          const { data, error } = await supabase.from("transactions").select("updated_at").eq("id", op.id).maybeSingle();
+          const { data, error } = await supabase
+            .from("transactions")
+            .select("updated_at")
+            .eq("id", op.id)
+            .maybeSingle();
           if (error) throw error;
           server = data;
         }
         const decision = decideConflict(op, server);
         if (decision === "apply") {
-          const { error } = op.kind === "upsert"
-            ? await supabase.from("transactions").upsert(op.row, { onConflict: "id" })
-            : await supabase.from("transactions").delete().eq("id", op.id);
+          const { error } =
+            op.kind === "upsert"
+              ? await supabase.from("transactions").upsert(op.row, { onConflict: "id" })
+              : await supabase.from("transactions").delete().eq("id", op.id);
           if (error) throw error;
           applied++;
         } else {
           conflicts++;
         }
-        writeQueue(userId, readQueue(userId).filter((o: PendingOp) => !(o.id === op.id && o.queuedAt === op.queuedAt)));
+        writeQueue(
+          userId,
+          readQueue(userId).filter(
+            (o: PendingOp) => !(o.id === op.id && o.queuedAt === op.queuedAt),
+          ),
+        );
       } catch (e) {
         if (isNetworkError(e)) break;
         console.error("Dropping invalid queued change", e);
-        writeQueue(userId, readQueue(userId).filter((o) => !(o.id === op.id && o.queuedAt === op.queuedAt)));
+        writeQueue(
+          userId,
+          readQueue(userId).filter((o) => !(o.id === op.id && o.queuedAt === op.queuedAt)),
+        );
       }
     }
     return { applied, conflicts };
-  })().finally(() => { flushing = null; });
+  })().finally(() => {
+    flushing = null;
+  });
   return flushing;
 }
 
@@ -164,7 +233,11 @@ export const profileQuery = (userId: string) =>
     queryKey: profileKey(userId),
     queryFn: async (): Promise<Profile> => {
       try {
-        const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle();
         if (error) throw error;
         let p = data;
         if (!p) {
@@ -172,7 +245,13 @@ export const profileQuery = (userId: string) =>
           if (ins.error) throw ins.error;
           p = ins.data;
         }
-        const profile: Profile = { id: p.id, display_name: p.display_name, currency: (p.currency as Currency) ?? "VND", settings: (p.settings as Record<string, unknown>) ?? {}, local_migrated_at: p.local_migrated_at };
+        const profile: Profile = {
+          id: p.id,
+          display_name: p.display_name,
+          currency: (p.currency as Currency) ?? "VND",
+          settings: (p.settings as Record<string, unknown>) ?? {},
+          local_migrated_at: p.local_migrated_at,
+        };
         saveSnapshot("profile", userId, profile);
         return profile;
       } catch (e) {
@@ -183,7 +262,12 @@ export const profileQuery = (userId: string) =>
     },
   });
 
-export async function updateProfile(userId: string, patch: Partial<Pick<Profile, "display_name" | "currency" | "local_migrated_at">> & { settings?: Json }) {
+export async function updateProfile(
+  userId: string,
+  patch: Partial<Pick<Profile, "display_name" | "currency" | "local_migrated_at">> & {
+    settings?: Json;
+  },
+) {
   const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
   if (error) throw error;
 }
@@ -192,12 +276,19 @@ export async function updateProfile(userId: string, patch: Partial<Pick<Profile,
 
 export const refsKey = (userId: string) => ["references", userId] as const;
 
-function normalizeRef(r: Record<string, unknown>): ReferencePortfolio {
+function normalizeRef(r: Tables<"reference_portfolios">): ReferencePortfolio {
   return {
-    id: String(r.id), name: String(r.name), description: (r.description as string) ?? null, notes: (r.notes as string) ?? null,
-    image_paths: (r.image_paths as string[]) ?? [], holdings: (r.holdings as unknown as RefHolding[]) ?? [],
-    total_value: r.total_value != null ? Number(r.total_value) : null, total_value_currency: (r.total_value_currency as string) ?? null,
-    ai_summary: (r.ai_summary as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
+    id: r.id,
+    name: r.name,
+    description: r.description ?? null,
+    notes: r.notes ?? null,
+    image_paths: r.image_paths ?? [],
+    holdings: (r.holdings as unknown as RefHolding[]) ?? [],
+    total_value: r.total_value != null ? Number(r.total_value) : null,
+    total_value_currency: r.total_value_currency ?? null,
+    ai_summary: r.ai_summary ?? null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
   };
 }
 
@@ -206,9 +297,12 @@ export const referencesQuery = (userId: string) =>
     queryKey: refsKey(userId),
     queryFn: async (): Promise<ReferencePortfolio[]> => {
       try {
-        const { data, error } = await supabase.from("reference_portfolios").select("*").order("created_at", { ascending: false });
+        const { data, error } = await supabase
+          .from("reference_portfolios")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
-        const rows = (data ?? []).map((r) => normalizeRef(r as Record<string, unknown>));
+        const rows = (data ?? []).map(normalizeRef);
         saveSnapshot("refs", userId, rows);
         return rows;
       } catch (e) {
@@ -222,14 +316,21 @@ export const referencesQuery = (userId: string) =>
 export type ReferenceInput = Omit<ReferencePortfolio, "id" | "created_at" | "updated_at">;
 
 export async function createReference(userId: string, input: ReferenceInput): Promise<string> {
-  const { data, error } = await supabase.from("reference_portfolios").insert({ ...input, user_id: userId, holdings: input.holdings as unknown as Json }).select("id").single();
+  const { data, error } = await supabase
+    .from("reference_portfolios")
+    .insert({ ...input, user_id: userId, holdings: input.holdings as unknown as Json })
+    .select("id")
+    .single();
   if (error) throw error;
   return data.id;
 }
 
 export async function updateReference(id: string, patch: Partial<ReferenceInput>) {
   const { holdings, ...rest } = patch;
-  const { error } = await supabase.from("reference_portfolios").update({ ...rest, ...(holdings ? { holdings: holdings as unknown as Json } : {}) }).eq("id", id);
+  const { error } = await supabase
+    .from("reference_portfolios")
+    .update({ ...rest, ...(holdings ? { holdings: holdings as unknown as Json } : {}) })
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -245,7 +346,9 @@ export const signedUrlsQuery = (paths: string[]) =>
     staleTime: 50 * 60 * 1000,
     enabled: paths.length > 0,
     queryFn: async (): Promise<Record<string, string>> => {
-      const { data, error } = await supabase.storage.from(REFERENCE_BUCKET).createSignedUrls(paths, 3600);
+      const { data, error } = await supabase.storage
+        .from(REFERENCE_BUCKET)
+        .createSignedUrls(paths, 3600);
       if (error) throw error;
       const out: Record<string, string> = {};
       for (const d of data ?? []) if (d.path && d.signedUrl) out[d.path] = d.signedUrl;
@@ -259,7 +362,9 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export async function uploadReferenceImage(userId: string, file: File): Promise<string> {
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const path = `${userId}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabase.storage.from(REFERENCE_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  const { error } = await supabase.storage
+    .from(REFERENCE_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
   if (error) throw error;
   return path;
 }
