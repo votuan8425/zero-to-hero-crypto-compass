@@ -1,11 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ArrowLeft, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
 import { CompareChart } from "@/components/app/compare-chart";
 import { usePortfolio, useReferences } from "@/hooks/use-app-data";
+import { useUser } from "@/hooks/use-user";
+import { isAdminUser } from "@/lib/admin";
 import { displaySymbol, normalizeSymbol } from "@/lib/coins";
 import { formatPercent } from "@/lib/format";
 import { analyzeConcentration } from "@/lib/reference";
@@ -31,9 +34,21 @@ export const Route = createFileRoute("/_authenticated/tham-khao/so-sanh")({
 const MINE = "__mine__";
 
 function ComparePage() {
+  const user = useUser();
+  const navigate = useNavigate();
   const refs = useReferences();
   const { allocation, holdings } = usePortfolio();
   const [selected, setSelected] = useState<string[]>([]);
+  const warnedRef = useRef(false);
+
+  // Chỉ admin mới được so sánh danh mục tham khảo.
+  useEffect(() => {
+    if (!isAdminUser(user) && !warnedRef.current) {
+      warnedRef.current = true;
+      toast.error("Chỉ admin mới được thêm/sửa danh mục tham khảo.");
+      void navigate({ to: "/tham-khao", replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (refs.data && selected.length === 0) setSelected(refs.data.slice(0, 2).map((r) => r.id));
@@ -90,6 +105,8 @@ function ComparePage() {
     setSelected((s) =>
       s.includes(id) ? s.filter((x) => x !== id) : s.length >= 4 ? s : [...s, id],
     );
+
+  if (!isAdminUser(user)) return null;
 
   return (
     <div>

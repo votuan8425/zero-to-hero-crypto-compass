@@ -27,6 +27,19 @@ async function usdVndRate(): Promise<number | null> {
   }
 }
 
+/**
+ * Vàng: PAXG trên OKX làm proxy (1 PAXG ≈ 1 ounce vàng). Nằm trong COINS
+ * nên xuất hiện trong danh sách chọn khi thêm lần mua, ngay sau ETH.
+ */
+export const GOLD_SYMBOL = "PAXG";
+
+/**
+ * Bạc: KAG (Kinesis Silver) trên CoinGecko làm proxy (1 KAG ≈ 1 ounce bạc).
+ * OKX không có cặp bạc nào (đã kiểm chứng 2026-11-17: không có XAG/KAG/SLV
+ * trong bảng tickers SPOT), nên bạc chỉ lấy từ CoinGecko, không qua OKX.
+ */
+export const SILVER_SYMBOL = "KAG";
+
 /** Spot prices from OKX (USDT pairs ≈ USD). */
 async function okxPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
   const j = await fetchJson<{ data?: { instId: string; last: string; open24h: string }[] }>(
@@ -49,7 +62,36 @@ async function okxPrices(): Promise<Record<string, { usd: number; change24h: num
       };
     }
   }
+  // Vàng (PAXG-USDT) lấy từ cùng bảng giá OKX qua vòng lặp COINS ở trên.
   return out;
+}
+
+/** Fallback riêng cho vàng khi OKX không trả PAXG: CoinGecko pax-gold, không cần key. */
+async function paxgGeckoPrice(): Promise<{ usd: number; change24h: number | null } | null> {
+  try {
+    const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
+      "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd&include_24hr_change=true",
+    );
+    const p = j["pax-gold"];
+    if (p?.usd != null) return { usd: p.usd, change24h: p.usd_24h_change ?? null };
+  } catch (e) {
+    console.error("paxg coingecko failed", e);
+  }
+  return null;
+}
+
+/** Fallback riêng cho bạc khi OKX không có cặp bạc: CoinGecko kinesis-silver, không cần key. */
+async function kagGeckoPrice(): Promise<{ usd: number; change24h: number | null } | null> {
+  try {
+    const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
+      "https://api.coingecko.com/api/v3/simple/price?ids=kinesis-silver&vs_currencies=usd&include_24hr_change=true",
+    );
+    const p = j["kinesis-silver"];
+    if (p?.usd != null) return { usd: p.usd, change24h: p.usd_24h_change ?? null };
+  } catch (e) {
+    console.error("kag coingecko failed", e);
+  }
+  return null;
 }
 
 async function geckoPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
@@ -81,6 +123,16 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
       } catch (e) {
         console.error("coingecko prices failed", e);
       }
+    }
+    // Vàng: nếu OKX không trả PAXG thì thử CoinGecko, vẫn không có thì để trống.
+    if (!usd[GOLD_SYMBOL]) {
+      const paxg = await paxgGeckoPrice();
+      if (paxg) usd[GOLD_SYMBOL] = paxg;
+    }
+    // Bạc: OKX không có cặp bạc nên luôn lấy từ CoinGecko nếu chưa có giá.
+    if (!usd[SILVER_SYMBOL]) {
+      const kag = await kagGeckoPrice();
+      if (kag) usd[SILVER_SYMBOL] = kag;
     }
     const usdVnd = await ratePromise;
     const prices: PriceMap = {};

@@ -35,6 +35,7 @@ import { buildBackup, downloadJson, importLegacy, parseBackup, restoreBackup } f
 import { scanLegacyData } from "@/lib/legacy-migration";
 import { formatDate, formatDateTime, formatNumber, todayKey, type Currency } from "@/lib/format";
 import { translateAuthError } from "@/lib/auth-errors";
+import { authEmailToUsername, isSyntheticAuthEmail } from "@/lib/username-auth";
 import { displaySymbol } from "@/lib/coins";
 
 export const Route = createFileRoute("/_authenticated/ca-nhan")({
@@ -124,16 +125,43 @@ function PersonalPage() {
   }
 
   const provider = (user.app_metadata?.provider as string | undefined) ?? "email";
+  const storedUsername =
+    typeof user.user_metadata?.["username"] === "string"
+      ? (user.user_metadata["username"] as string)
+      : null;
+  const username = storedUsername ?? authEmailToUsername(user.email);
+  const isSynthetic = isSyntheticAuthEmail(user.email);
+  const realEmail = isSynthetic ? null : (user.email ?? null);
+  const providerLabel =
+    provider === "google"
+      ? "Google"
+      : provider === "lovable"
+        ? "Lovable"
+        : isSynthetic
+          ? "tài khoản"
+          : "email";
 
   return (
     <div>
-      <PageHeader title="Cá nhân" subtitle={user.email ?? undefined} />
+      <PageHeader title="Cá nhân" subtitle={`Tài khoản: ${username}`} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Section
           icon={<UserRound className="h-4 w-4" />}
           title="Tài khoản"
-          description={`Đăng nhập bằng ${provider === "google" ? "Google" : provider === "email" ? "email" : provider}. Tham gia từ ${formatDate(new Date(user.created_at))}.`}
+          description={`Đăng nhập bằng ${providerLabel}. Tham gia từ ${formatDate(new Date(user.created_at))}.`}
         >
+          <dl className="mb-4 grid gap-2 text-sm">
+            <div className="flex justify-between gap-3 rounded-lg bg-surface-raised px-3 py-2">
+              <dt className="text-muted-foreground">Tài khoản</dt>
+              <dd className="font-medium">{username || "—"}</dd>
+            </div>
+            {realEmail && (
+              <div className="flex justify-between gap-3 rounded-lg bg-surface-raised px-3 py-2">
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="font-medium">{realEmail}</dd>
+              </div>
+            )}
+          </dl>
           <form onSubmit={saveProfile} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="dn">Tên hiển thị</Label>
@@ -205,7 +233,9 @@ function PersonalPage() {
 
         <LegacyMigration />
         <BackupSection />
-        {provider === "email" && <PasswordSection email={user.email ?? ""} />}
+        {provider === "email" && (
+          <PasswordSection email={user.email ?? ""} isSynthetic={isSynthetic} />
+        )}
 
         <Section
           icon={<LogOut className="h-4 w-4" />}
@@ -397,7 +427,7 @@ function LegacyMigration() {
   );
 }
 
-function PasswordSection({ email }: { email: string }) {
+function PasswordSection({ email, isSynthetic }: { email: string; isSynthetic: boolean }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [busy, setBusy] = useState(false);
@@ -408,18 +438,32 @@ function PasswordSection({ email }: { email: string }) {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({
-      password: next,
-      current_password: current,
-    } as { password: string });
-    setBusy(false);
-    if (error) {
-      toast.error(translateAuthError(error));
-      return;
+    try {
+      if (isSynthetic) {
+        // Tài khoản dùng tên đăng nhập không có email thật: xác minh mật
+        // khẩu hiện tại bằng cách đăng nhập lại, rồi đổi thẳng mật khẩu.
+        const verify = await supabase.auth.signInWithPassword({ email, password: current });
+        if (verify.error) {
+          toast.error("Mật khẩu hiện tại không đúng.");
+          return;
+        }
+        const { error } = await supabase.auth.updateUser({ password: next });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.updateUser({
+          password: next,
+          current_password: current,
+        } as { password: string });
+        if (error) throw error;
+      }
+      setCurrent("");
+      setNext("");
+      toast.success("Đã đổi mật khẩu.");
+    } catch (err) {
+      toast.error(translateAuthError(err));
+    } finally {
+      setBusy(false);
     }
-    setCurrent("");
-    setNext("");
-    toast.success("Đã đổi mật khẩu.");
   }
   async function sendReset() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -466,13 +510,19 @@ function PasswordSection({ email }: { email: string }) {
           <Button type="submit" variant="surface" disabled={busy}>
             {busy && <Loader2 className="animate-spin" />} Đổi mật khẩu
           </Button>
-          <button
-            type="button"
-            onClick={() => void sendReset()}
-            className="text-xs text-primary hover:underline"
-          >
-            Quên mật khẩu hiện tại?
-          </button>
+          {isSynthetic ? (
+            <p className="text-xs text-muted-foreground">
+              Tài khoản này không có email nên không đặt lại mật khẩu qua email được.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void sendReset()}
+              className="text-xs text-primary hover:underline"
+            >
+              Quên mật khẩu hiện tại?
+            </button>
+          )}
         </div>
       </form>
     </section>

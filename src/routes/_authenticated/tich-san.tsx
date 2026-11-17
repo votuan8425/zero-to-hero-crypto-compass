@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
+import { DonutChart } from "@/components/app/donut-chart";
 import { Stat } from "@/components/app/stat";
 import { StreakCalendar } from "@/components/app/streak-calendar";
 import { TransactionDialog } from "@/components/app/transaction-dialog";
@@ -59,7 +60,7 @@ function AccumulatePage() {
   const search = Route.useSearch();
   const currency = useCurrency();
   const { pending } = useSync();
-  const { txs, totals, usdVnd } = usePortfolio();
+  const { txs, totals, allocation, holdings, usdVnd } = usePortfolio();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tx | null>(null);
   const [toDelete, setToDelete] = useState<Tx | null>(null);
@@ -178,6 +179,22 @@ function AccumulatePage() {
               hint={`${list.length} lần mua`}
             />
           </div>
+
+          {holdings.length > 0 && (
+            <section className="panel p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wider">Phân bổ danh mục</h2>
+              <p className="mb-4 mt-1 text-xs text-muted-foreground">
+                {allocation.basis === "value"
+                  ? "Theo giá trị hiện tại"
+                  : "Theo vốn đã bỏ ra (chưa có đủ giá thị trường)"}
+              </p>
+              <DonutChart
+                items={allocation.slices}
+                centerValue={String(holdings.length)}
+                centerLabel="loại coin"
+              />
+            </section>
+          )}
 
           <section className="panel overflow-hidden">
             <h2 className="px-5 pt-5 text-sm font-semibold uppercase tracking-wider">

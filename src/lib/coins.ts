@@ -2,12 +2,16 @@ export interface CoinInfo {
   symbol: string;
   name: string;
   geckoId: string;
+  /** Đơn vị số lượng: kim loại quý tính theo ounce (1 PAXG ≈ 1 ounce vàng, 1 KAG ≈ 1 ounce bạc). */
+  unit?: "ounce";
 }
 
 /** Popular coins supported for accumulation, with CoinGecko ids for live prices. */
 export const COINS: CoinInfo[] = [
   { symbol: "BTC", name: "Bitcoin", geckoId: "bitcoin" },
   { symbol: "ETH", name: "Ethereum", geckoId: "ethereum" },
+  { symbol: "PAXG", name: "Vàng", geckoId: "pax-gold", unit: "ounce" },
+  { symbol: "KAG", name: "Bạc", geckoId: "kinesis-silver", unit: "ounce" },
   { symbol: "SOL", name: "Solana", geckoId: "solana" },
   { symbol: "BNB", name: "BNB", geckoId: "binancecoin" },
   { symbol: "XRP", name: "XRP", geckoId: "ripple" },

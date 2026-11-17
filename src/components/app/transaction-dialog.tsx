@@ -184,6 +184,12 @@ export function TransactionDialog({
               placeholder="Ví dụ: 0,005"
               className="num h-11"
             />
+            {getCoin(symbol)?.unit === "ounce" && (
+              <p className="text-xs text-muted-foreground">
+                Số lượng tính theo ounce — 1 {symbol} ≈ 1 ounce{" "}
+                {getCoin(symbol)?.name.toLowerCase()}.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

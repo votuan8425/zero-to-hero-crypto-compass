@@ -13,11 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
-import { DonutChart } from "@/components/app/donut-chart";
 import { CoinLogo } from "@/components/app/coin-logo";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
 import { computeStreak } from "@/lib/portfolio";
+import { GOLD_SYMBOL } from "@/lib/prices.functions";
+import type { PriceMap } from "@/lib/portfolio";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { displaySymbol } from "@/lib/coins";
 import { scanLegacyData } from "@/lib/legacy-migration";
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/_authenticated/trang-chu")({
       { title: "Trang chủ — ZERO TO HERO" },
       {
         name: "description",
-        content: "Tổng tài sản, lãi/lỗ và phân bổ danh mục tiền mã hoá của bạn.",
+        content: "Tổng tài sản, lãi/lỗ và tài sản đang nắm giữ của bạn.",
       },
       { property: "og:title", content: "Trang chủ — ZERO TO HERO" },
       { property: "og:description", content: "Tổng quan danh mục tích sản của bạn." },
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/_authenticated/trang-chu")({
 function HomePage() {
   const currency = useCurrency();
   const { data: profile } = useProfile();
-  const { txs, prices, holdings, totals, allocation, usdVnd } = usePortfolio();
+  const { txs, prices, holdings, totals, usdVnd } = usePortfolio();
   const legacy = useQuery({
     queryKey: ["legacy-scan"],
     queryFn: scanLegacyData,
@@ -146,6 +147,8 @@ function HomePage() {
         />
       </div>
 
+      <MarketPrices prices={prices.data?.prices} loading={prices.isLoading} money={money} />
+
       {holdings.length === 0 && !txs.isLoading ? (
         <div className="mt-6">
           <EmptyState
@@ -162,21 +165,7 @@ function HomePage() {
           />
         </div>
       ) : (
-        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <section className="panel p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider">Phân bổ danh mục</h2>
-            <p className="mb-4 mt-1 text-xs text-muted-foreground">
-              {allocation.basis === "value"
-                ? "Theo giá trị hiện tại"
-                : "Theo vốn đã bỏ ra (chưa có đủ giá thị trường)"}
-            </p>
-            <DonutChart
-              items={allocation.slices}
-              centerValue={String(holdings.length)}
-              centerLabel="loại coin"
-            />
-          </section>
-
+        <div className="mt-6">
           <section className="panel overflow-hidden">
             <h2 className="px-5 pt-5 text-sm font-semibold uppercase tracking-wider">
               Tài sản đang nắm giữ
@@ -209,5 +198,70 @@ function HomePage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Bảng giá kiểu OKX: BTC, ETH và Vàng (PAXG — 1 PAXG ≈ 1 ounce vàng,
+ * giá lấy từ OKX, fallback CoinGecko; xem src/lib/prices.functions.ts).
+ * Giá theo đơn vị tiền tệ người dùng đang chọn; vàng tính theo ounce.
+ */
+function MarketPrices({
+  prices,
+  loading,
+  money,
+}: {
+  prices: PriceMap | undefined;
+  loading: boolean;
+  money: (usd: number | null, compact?: boolean) => string;
+}) {
+  const rows = [
+    { symbol: "BTC", name: "Bitcoin", unit: null as string | null },
+    { symbol: "ETH", name: "Ethereum", unit: null as string | null },
+    { symbol: GOLD_SYMBOL, name: "Vàng", unit: "1 ounce" },
+  ];
+  return (
+    <section className="panel mt-6 p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wider">Giá thị trường</h2>
+      <p className="mb-4 mt-1 text-xs text-muted-foreground">
+        Giá từ OKX · Vàng theo PAXG (1 PAXG ≈ 1 ounce)
+      </p>
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {rows.map((r) => {
+            const q = prices?.[r.symbol];
+            return (
+              <li key={r.symbol} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <CoinLogo symbol={r.symbol} size={36} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-semibold">{r.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {r.symbol === GOLD_SYMBOL ? "PAXG" : displaySymbol(r.symbol)}
+                      {r.unit ? ` · ${r.unit}` : ""}
+                    </span>
+                  </div>
+                  <div className="num text-xs text-muted-foreground">
+                    {q ? money(q.usd) : "Chưa có giá"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <PnlText value={q?.change24h ?? null} className="text-sm font-semibold">
+                    {q?.change24h != null ? formatPercent(q.change24h, 2, true) : "—"}
+                  </PnlText>
+                  <div className="text-xs text-muted-foreground">24 giờ</div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

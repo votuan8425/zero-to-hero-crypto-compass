@@ -12,6 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BrandMark } from "@/components/app/brand";
 import { GoogleG } from "@/components/app/google-g";
 import { translateAuthError } from "@/lib/auth-errors";
+import { normalizeUsername, usernameToAuthEmail, validateUsername } from "@/lib/username-auth";
+
+const CONFIRM_EMAIL_NOTICE =
+  "Tài khoản đã được tạo nhưng chưa đăng nhập được vì Supabase đang bật “Confirm email”. Hãy tắt “Confirm email” trong phần Auth của Supabase rồi đăng nhập lại bằng tài khoản và mật khẩu vừa tạo. Tài khoản dùng tên đăng nhập không nhận được email xác nhận.";
 
 function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return "/trang-chu";
@@ -55,8 +59,9 @@ function AuthPage() {
   const navigate = useNavigate();
   const target = safeRedirect(search.redirect);
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
-  const [email, setEmail] = useState("");
+  const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,32 +84,81 @@ function AuthPage() {
     setBusy(true);
     setNotice(null);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin + "/auth",
-            data: { display_name: name || undefined },
-          },
-        });
-        if (error) throw error;
-        if (!data.session)
+      const raw = account.trim();
+      if (mode === "forgot") {
+        if (!raw.includes("@")) {
           setNotice(
-            "Đã tạo tài khoản! Vui lòng kiểm tra email và bấm vào liên kết xác nhận để đăng nhập.",
+            "Tài khoản này không có email nên không thể gửi liên kết đặt lại mật khẩu. Hãy liên hệ admin để được hỗ trợ, hoặc đổi mật khẩu khi đang đăng nhập ở mục Cá nhân.",
           );
-      } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          return;
+        }
+        const { error } = await supabase.auth.resetPasswordForEmail(raw.toLowerCase(), {
           redirectTo: `${window.location.origin}/reset-password`,
         });
         if (error) throw error;
         setNotice(
           "Nếu email tồn tại, chúng tôi đã gửi liên kết đặt lại mật khẩu. Vui lòng kiểm tra hộp thư.",
         );
+        return;
       }
+
+      if (mode === "signup") {
+        const usernameError = raw.includes("@")
+          ? "Đăng ký chỉ dùng tên tài khoản, không dùng email. Hãy nhập tên tài khoản, ví dụ: minhtuan."
+          : validateUsername(raw);
+        if (usernameError) {
+          toast.error(usernameError);
+          return;
+        }
+        if (password.length < 6) {
+          toast.error("Mật khẩu phải có ít nhất 6 ký tự.");
+          return;
+        }
+        if (password !== confirmPassword) {
+          toast.error("Hai mật khẩu không khớp.");
+          return;
+        }
+        const username = normalizeUsername(raw);
+        const email = usernameToAuthEmail(raw);
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin + "/auth",
+            data: { username, display_name: name.trim() || username },
+          },
+        });
+        if (error) throw error;
+        if (data.session) return;
+        // No session yet: either confirmation is required, or sign-in needs a retry.
+        const retry = await supabase.auth.signInWithPassword({ email, password });
+        if (!retry.error) return;
+        if (
+          String(retry.error.message ?? "")
+            .toLowerCase()
+            .includes("email not confirmed")
+        ) {
+          setNotice(CONFIRM_EMAIL_NOTICE);
+          return;
+        }
+        throw retry.error;
+      }
+
+      // signin: username or email (old email accounts keep working).
+      if (!raw) {
+        toast.error("Vui lòng nhập tài khoản.");
+        return;
+      }
+      if (!raw.includes("@")) {
+        const usernameError = validateUsername(raw);
+        if (usernameError) {
+          toast.error(usernameError);
+          return;
+        }
+      }
+      const email = usernameToAuthEmail(raw);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {
@@ -129,7 +183,8 @@ function AuthPage() {
           <>
             <h1 className="text-xl font-bold">Quên mật khẩu</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Nhập email để nhận liên kết đặt lại mật khẩu.
+              Nhập email để nhận liên kết đặt lại mật khẩu. Tài khoản đăng ký bằng tên đăng nhập
+              không có email nên không đặt lại bằng cách này.
             </p>
           </>
         ) : (
@@ -168,7 +223,7 @@ function AuthPage() {
               <LovableMark className="size-[18px]" /> Tiếp tục với Lovable
             </Button>
             <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> hoặc dùng email{" "}
+              <span className="h-px flex-1 bg-border" /> hoặc dùng tài khoản{" "}
               <span className="h-px flex-1 bg-border" />
             </div>
           </div>
@@ -188,16 +243,22 @@ function AuthPage() {
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="account">{mode === "forgot" ? "Email" : "Tài khoản"}</Label>
             <Input
-              id="email"
-              type="email"
+              id="account"
+              type="text"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ban@email.com"
-              autoComplete="email"
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              placeholder={mode === "forgot" ? "ban@email.com" : "Ví dụ: minhtuan"}
+              autoComplete={mode === "forgot" ? "email" : "username"}
             />
+            {mode !== "forgot" && (
+              <p className="text-xs text-muted-foreground">
+                Chỉ cần tên tài khoản và mật khẩu, không cần email. Tài khoản cũ đăng ký bằng email
+                vẫn đăng nhập được bằng email.
+              </p>
+            )}
           </div>
           {mode !== "forgot" && (
             <div className="space-y-1.5">
@@ -225,6 +286,21 @@ function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Tối thiểu 6 ký tự"
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              />
+            </div>
+          )}
+          {mode === "signup" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password">Nhập lại mật khẩu</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhập lại mật khẩu"
+                autoComplete="new-password"
               />
             </div>
           )}

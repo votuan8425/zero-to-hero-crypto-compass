@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Info, Loader2, Pencil, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { HoldingsEditor } from "@/components/app/holdings-editor";
 import { ReferenceAnalysis } from "@/components/app/reference-analysis";
 import { usePortfolio, useReferences } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
+import { isAdminUser } from "@/lib/admin";
 import { deleteReference, refsKey, signedUrlsQuery, updateReference } from "@/lib/data";
 import {
   checkPercentSum,
@@ -73,6 +74,16 @@ function ReferenceDetailPage() {
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
+  const warnedRef = useRef(false);
+
+  // Chỉ admin mới được xem/sửa danh mục tham khảo riêng.
+  useEffect(() => {
+    if (!isAdminUser(user) && !warnedRef.current) {
+      warnedRef.current = true;
+      toast.error("Chỉ admin mới được thêm/sửa danh mục tham khảo.");
+      void navigate({ to: "/tham-khao", replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (ref && !editing) {
@@ -89,6 +100,7 @@ function ReferenceDetailPage() {
   );
 
   if (refs.isLoading) return <Skeleton className="h-64" />;
+  if (!isAdminUser(user)) return null;
   if (!ref) {
     return (
       <EmptyState

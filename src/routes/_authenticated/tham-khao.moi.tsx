@@ -16,6 +16,7 @@ import { ReferenceAnalysis } from "@/components/app/reference-analysis";
 import { useSync } from "@/components/app/sync-provider";
 import { useUser } from "@/hooks/use-user";
 import { useReferences } from "@/hooks/use-app-data";
+import { isAdminUser } from "@/lib/admin";
 import { analyzePortfolioImages } from "@/lib/analyze.functions";
 import { createReference, refsKey, removeReferenceImages, uploadReferenceImage } from "@/lib/data";
 import {
@@ -63,6 +64,16 @@ function NewReferencePage() {
   const [saving, setSaving] = useState(false);
   const uploaded = useRef<Set<string>>(new Set());
   const saved = useRef(false);
+  const warnedRef = useRef(false);
+
+  // Chỉ admin mới được thêm danh mục tham khảo.
+  useEffect(() => {
+    if (!isAdminUser(user) && !warnedRef.current) {
+      warnedRef.current = true;
+      toast.error("Chỉ admin mới được thêm/sửa danh mục tham khảo.");
+      void navigate({ to: "/tham-khao", replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (!name && refs.data) setName(`Tham khảo ${String(refs.data.length + 1).padStart(2, "0")}`);
@@ -175,6 +186,8 @@ function NewReferencePage() {
       setSaving(false);
     }
   }
+
+  if (!isAdminUser(user)) return null;
 
   return (
     <div>
