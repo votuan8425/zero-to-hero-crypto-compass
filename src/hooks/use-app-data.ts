@@ -18,10 +18,9 @@ function readPriceCache(): PricesResult | null {
 }
 
 /** Live prices, refreshed every minute; falls back to the last known prices when offline. */
-export function usePrices(symbols: string[]) {
-  const key = [...new Set(symbols)].sort();
+export function usePrices() {
   return useQuery({
-    queryKey: ["prices", ...key],
+    queryKey: ["prices"],
     queryFn: async (): Promise<PricesResult> => {
       const cached = readPriceCache();
       const stale = (c: PricesResult): PricesResult => ({
@@ -30,7 +29,7 @@ export function usePrices(symbols: string[]) {
       });
       let res: PricesResult;
       try {
-        res = await getPrices({ data: { symbols: key } });
+        res = await getPrices();
       } catch (e) {
         if (cached) return stale(cached);
         throw e;
@@ -75,8 +74,7 @@ export function useReferences() {
 /** Live portfolio: holdings, totals and allocation recalculated whenever transactions or prices change. */
 export function usePortfolio() {
   const txs = useTransactions();
-  const symbols = useMemo(() => [...new Set((txs.data ?? []).map((t) => t.symbol))], [txs.data]);
-  const prices = usePrices(symbols);
+  const prices = usePrices();
   return useMemo(() => {
     const holdings = computeHoldings(txs.data ?? [], prices.data?.prices ?? {});
     const totals = computeTotals(holdings);
