@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Minus, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +67,17 @@ export function formatSelectedTime(t: number, range: ChartRange): string {
   return `${mm}/${yyyy}`;
 }
 
+/** Bước zoom (đổi số nến hiển thị): phóng to = ít nến hơn (mỗi nến to ra),
+ *  thu nhỏ = nhiều nến hơn; kẹp trong [8, tổng số nến đã nạp]. */
+export function zoomVisibleCount(
+  current: number,
+  total: number,
+  dir: "in" | "out",
+): number {
+  const next = dir === "in" ? Math.round(current * 0.7) : Math.round(current * 1.4);
+  return Math.min(Math.max(next, 8), Math.max(total, 8));
+}
+
 const W = 560;
 const H = 224;
 const PAD = 10;
@@ -74,6 +85,11 @@ const LABEL_W = 84; // Gutter phải cho mốc giá.
 const TIME_LABEL_H = 22; // Dải dưới cho nhãn thời gian.
 const PLOT_BOTTOM = H - PAD - TIME_LABEL_H;
 const PLOT_H = PLOT_BOTTOM - PAD;
+/** Khoảng trống bên phải chart (tính bằng số nến): nến mới nhất không bị
+ *  dí sát vào trục giá, kéo sang phải vẫn còn chỗ thở. */
+const RIGHT_OFFSET_SLOTS = 3;
+/** Số nến ít nhất khi phóng to hết cỡ. */
+const MIN_VISIBLE = 8;
 /** Hộp thông tin nến đang chọn (giá + % của nến đó). */
 const TIP_W = 112;
 const TIP_H = 44;
@@ -106,6 +122,9 @@ export function PriceChartDialog({
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
   const [chartType, setChartType] = useState<"line" | "candles">("candles");
+  // Zoom: số nến hiển thị trong cửa sổ (mặc định theo khung); nút + / −
+  // đổi số này, đổi khung/coin thì về lại mặc định.
+  const [visibleCount, setVisibleCount] = useState(CHART_VISIBLE_COUNT[range]);
   // Kéo thả (pan): panOffset = số nến đã lùi khỏi cửa sổ mới nhất.
   const [panOffset, setPanOffset] = useState(0);
   // Nến đang chọn (bấm vào nến): chỉ số trong cửa sổ hiển thị, null = chưa chọn.
@@ -141,13 +160,15 @@ export function PriceChartDialog({
     staleTime: 60_000,
   });
   const points = candles.data?.points ?? [];
-  const VISIBLE = CHART_VISIBLE_COUNT[range];
-  const maxPan = Math.max(0, points.length - VISIBLE);
-  const clampedPan = clampPan(panOffset, points.length, VISIBLE);
-  const startIndex = Math.max(0, points.length - VISIBLE - clampedPan);
-  const visiblePoints = points.slice(startIndex, startIndex + VISIBLE);
+  const visible =
+    points.length === 0 ? 0 : Math.min(Math.max(visibleCount, MIN_VISIBLE), points.length);
+  const maxPan = Math.max(0, points.length - visible);
+  const clampedPan = clampPan(panOffset, points.length, visible);
+  const startIndex = Math.max(0, points.length - visible - clampedPan);
+  const visiblePoints = points.slice(startIndex, startIndex + visible);
   // Đổi khung thời gian / coin thì về lại cửa sổ mới nhất, bỏ chọn nến.
   useEffect(() => {
+    setVisibleCount(CHART_VISIBLE_COUNT[range]);
     setPanOffset(0);
     setSelectedIdx(null);
     dragRef.current = null;
@@ -167,8 +188,10 @@ export function PriceChartDialog({
     const min = rawMin - pad;
     const max = rawMax + pad;
     const plotW = W - PAD * 2 - LABEL_W;
-    const x = (i: number) =>
-      PAD + (i / Math.max(1, visiblePoints.length - 1)) * plotW;
+    // Bước nến tính cả khoảng trống bên phải: nến cuối không dí sát trục
+    // giá mà chừa lại RIGHT_OFFSET_SLOTS ô trống để chart thoáng.
+    const stepPx = plotW / Math.max(1, visiblePoints.length - 1 + RIGHT_OFFSET_SLOTS);
+    const x = (i: number) => PAD + i * stepPx;
     const y = (v: number) => PAD + (1 - (v - min) / (max - min)) * PLOT_H;
     const line = visiblePoints
       .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.c).toFixed(1)}`)
@@ -182,7 +205,7 @@ export function PriceChartDialog({
     });
     // Nến: râu (cao→thấp) + thân (mở→đóng); xanh khi đóng >= mở, đỏ khi giảm.
     // Nến doji (mở = đóng) thì thân cao 1px thành một gạch ngang.
-    const bw = Math.max(2, (plotW / visiblePoints.length) * 0.62);
+    const bw = Math.max(2, stepPx * 0.62);
     const candleBars = visiblePoints.map((p, i) => {
       const cx = x(i);
       const top = y(Math.max(p.o, p.c));
@@ -256,7 +279,7 @@ export function PriceChartDialog({
       candleBars,
       timeLabels,
       lastClose: last?.c ?? null,
-      stepPx: plotW / Math.max(1, visiblePoints.length - 1),
+      stepPx,
       plotW,
       sel,
     };
@@ -274,7 +297,9 @@ export function PriceChartDialog({
       : null;
   const up = (change ?? 0) >= 0;
   const unit = coin?.unit === "ounce" ? " / ounce" : "";
-  const canPan = points.length > VISIBLE;
+  const canPan = points.length > visible;
+  const canZoomIn = visible > MIN_VISIBLE;
+  const canZoomOut = visible < points.length;
 
   function resetDragTransform() {
     candleGroupRef.current?.setAttribute("transform", "translate(0, 0)");
@@ -321,7 +346,7 @@ export function PriceChartDialog({
     } else if (canPan) {
       // Kéo: chốt độ lùi theo nến (làm tròn theo bước nến).
       const steps = Math.round(dx / chart.stepPx);
-      setPanOffset(clampPan(dragRef.current.startPan + steps, points.length, VISIBLE));
+      setPanOffset(clampPan(dragRef.current.startPan + steps, points.length, visible));
       setSelectedIdx(null);
     }
     dragRef.current = null;
@@ -397,6 +422,38 @@ export function PriceChartDialog({
               Nến
             </ToggleGroupItem>
           </ToggleGroup>
+          {/* Zoom: đổi số nến hiển thị (phóng to = ít nến hơn, thu nhỏ =
+              nhiều nến hơn). Bấm từng nấc nên mượt, không lag như kéo. */}
+          <div
+            className="flex items-center gap-0 rounded-full bg-muted p-1"
+            role="group"
+            aria-label="Phóng to / thu nhỏ biểu đồ"
+          >
+            <button
+              type="button"
+              aria-label="Thu nhỏ: xem nhiều nến hơn"
+              title="Thu nhỏ: xem nhiều nến hơn"
+              disabled={!canZoomOut}
+              onClick={() =>
+                setVisibleCount((v) => zoomVisibleCount(v, points.length, "out"))
+              }
+              className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-40"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Phóng to: xem ít nến hơn"
+              title="Phóng to: xem ít nến hơn"
+              disabled={!canZoomIn}
+              onClick={() =>
+                setVisibleCount((v) => zoomVisibleCount(v, points.length, "in"))
+              }
+              className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div
@@ -602,8 +659,8 @@ export function PriceChartDialog({
         </div>
         <p className="mt-1 text-center text-[11px] text-muted-foreground">
           {canPan
-            ? "Kéo để xem nến cũ hơn · Bấm vào một nến để xem giá và % của nến đó."
-            : "Bấm vào một nến để xem giá và % của nến đó."}
+            ? "Kéo để xem nến cũ hơn · Bấm vào nến để xem giá · Nút + / − để phóng to, thu nhỏ."
+            : "Bấm vào nến để xem giá · Nút + / − để phóng to, thu nhỏ."}
         </p>
 
         <div className="grid grid-cols-3 gap-2 text-center">

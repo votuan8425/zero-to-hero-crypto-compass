@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candleIsUp, clampPan, formatChartTime, formatSelectedTime } from "@/components/app/price-chart-dialog";
+import { candleIsUp, clampPan, formatChartTime, formatSelectedTime, zoomVisibleCount } from "@/components/app/price-chart-dialog";
 import { bucketPricesToCandles } from "@/lib/prices.functions";
 import { fetchCandlesFromBrowser } from "@/lib/market-client";
 
@@ -104,5 +104,15 @@ describe("fetchCandlesFromBrowser (dự phòng khi server không lấy được 
     const res = await fetchCandlesFromBrowser("XXX", "1D");
     expect(res.points).toEqual([]);
     expect(res.error).toBe("Coin không hỗ trợ.");
+  });
+});
+
+describe("zoomVisibleCount (nút + / − đổi số nến hiển thị)", () => {
+  it("phóng to thì ít nến hơn, thu nhỏ thì nhiều nến hơn, kẹp trong [8, tổng]", () => {
+    expect(zoomVisibleCount(24, 72, "in")).toBe(17);
+    expect(zoomVisibleCount(24, 72, "out")).toBe(34);
+    expect(zoomVisibleCount(8, 72, "in")).toBe(8);
+    expect(zoomVisibleCount(72, 72, "out")).toBe(72);
+    expect(zoomVisibleCount(24, 20, "out")).toBe(20);
   });
 });
