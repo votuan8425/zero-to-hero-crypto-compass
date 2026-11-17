@@ -109,6 +109,8 @@ function AccumulatePage() {
   const yearGroups = useMemo(() => groups.filter((g) => g.year === year), [groups, year]);
   const yearTotal = useMemo(() => yearTotals(groups, year), [groups, year]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // Tháng được bấm trực tiếp — chỉ tháng này mới hiện bảng chi tiết.
+  const [clickedKey, setClickedKey] = useState<string | null>(null);
   const selected: MonthGroup | null =
     yearGroups.find((g) => g.key === selectedKey) ??
     yearGroups.find((g) => g.key === `${thisYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`) ??
@@ -171,6 +173,7 @@ function AccumulatePage() {
                 onClick={() => {
                   setYear(year - 1);
                   setSelectedKey(null);
+                  setClickedKey(null);
                 }}
               >
                 <ChevronLeft />
@@ -184,6 +187,7 @@ function AccumulatePage() {
                 onClick={() => {
                   setYear(year + 1);
                   setSelectedKey(null);
+                  setClickedKey(null);
                 }}
               >
                 <ChevronRight />
@@ -208,7 +212,10 @@ function AccumulatePage() {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => setSelectedKey(key)}
+                      onClick={() => {
+                        setSelectedKey(key);
+                        setClickedKey((prev) => (prev === key ? null : key));
+                      }}
                       disabled={!g}
                       aria-label={
                         g
@@ -217,7 +224,7 @@ function AccumulatePage() {
                       }
                       className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
                     >
-                      {isSel && g && (
+                      {clickedKey === key && g && (
                         <span
                           className={cn(
                             "absolute top-0 z-20 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-3 py-2 text-left shadow-lg",
@@ -233,7 +240,7 @@ function AccumulatePage() {
                             {g.buys} lần mua · {money(g.investedUsd)}
                           </span>
                           <span className="num block text-xs text-muted-foreground">
-                            TB {money(g.buys ? g.investedUsd / g.buys : null)}/lần
+                            Avg {money(g.buys ? g.investedUsd / g.buys : null)}/lần
                           </span>
                         </span>
                       )}
@@ -244,9 +251,11 @@ function AccumulatePage() {
                         className={cn(
                           "w-full rounded-t-md transition-colors",
                           g
-                            ? isSel
-                              ? "lime-gradient"
-                              : "bg-primary/60 group-hover:bg-primary"
+                            ? clickedKey === key
+                              ? "bg-[oklch(0.62_0.19_135)] ring-2 ring-white/90"
+                              : isSel
+                                ? "lime-gradient"
+                                : "bg-primary/60 group-hover:bg-primary"
                             : "bg-surface-raised",
                         )}
                         style={{ height: `${h}%` }}
@@ -273,7 +282,7 @@ function AccumulatePage() {
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
                     <div>
-                      {selected.buys} lần mua · TB{" "}
+                      {selected.buys} lần mua · Avg{" "}
                       {money(selected.buys ? selected.investedUsd / selected.buys : null)}
                     </div>
                     <div className="mt-0.5">Bấm vào cột để xem tháng khác</div>
@@ -293,7 +302,7 @@ function AccumulatePage() {
             />
             <Stat
               icon={<Clock className="h-3.5 w-3.5" />}
-              label="Trung bình mỗi lần"
+              label="Avg mỗi lần"
               value={money(avg)}
               hint={`${list.length} lần mua`}
             />

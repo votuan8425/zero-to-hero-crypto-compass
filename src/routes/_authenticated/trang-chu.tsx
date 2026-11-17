@@ -212,7 +212,7 @@ function HomePage() {
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="num inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
-                        Giá mua TB {money(h.avgCostUsd)}
+                        Giá mua Avg {money(h.avgCostUsd)}
                       </span>
                       {h.priceUsd != null && (
                         <span className="num text-xs text-muted-foreground">
