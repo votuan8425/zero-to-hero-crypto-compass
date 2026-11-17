@@ -96,15 +96,6 @@ function AdminAllocationCard({
         centerLabel="token"
         centerValue={String(allocation.slices.length)}
       />
-      <ul className="mt-4 space-y-1.5">
-        {allocation.slices.map((s) => (
-          <li key={s.symbol} className="flex items-center gap-2 text-sm">
-            <CoinLogo symbol={s.symbol} size={18} />
-            <span className="flex-1">{displaySymbol(s.symbol)}</span>
-            <span className="num text-muted-foreground">{formatPercent(s.percent)}</span>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }
