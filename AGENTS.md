@@ -28,3 +28,9 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Purchases sync through `src/lib/data.ts`: writes go to the cloud immediately or into the per-user offline queue (`src/lib/offline-queue.ts`), replayed idempotently by row id — keeps cross-device data duplicate-free.
+- Imports (old browser data, backups) use `transactions.import_key` with upsert-ignore-duplicates — makes re-imports safe.
+- Market prices come from the public `getPrices` server function (OKX, CoinGecko fallback) and are cached in localStorage for offline use.
+- Screenshot analysis runs server-side in `src/lib/analyze.functions.ts`, reading only the caller's own files from the private `reference-images` bucket.
