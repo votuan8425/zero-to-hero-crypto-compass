@@ -309,7 +309,7 @@ function MarketPrices({
           <Skeleton className="h-12" />
         </div>
       ) : (
-        <ul className="max-h-[232px] divide-y divide-border overflow-y-auto pr-1">
+        <ul className="max-h-[232px] divide-y divide-border overflow-y-scroll scroll-thin pr-1">
           {rows.map((c) => {
             const q = prices?.[c.symbol];
             const isFav = favorites.includes(c.symbol);

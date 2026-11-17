@@ -22,6 +22,14 @@ const RANGES: { value: ChartRange; label: string }[] = [
   { value: "1Y", label: "Năm" },
 ];
 
+/** Màu từng cột xanh/đỏ: xanh nếu giá kỳ đó tăng so với kỳ trước; cột đầu
+ *  tiên theo xu hướng chung (không có kỳ trước để so). */
+export function columnUps(closes: number[]): boolean[] {
+  if (closes.length === 0) return [];
+  const overallUp = closes[closes.length - 1] >= closes[0];
+  return closes.map((c, i) => (i === 0 ? overallUp : c >= closes[i - 1]));
+}
+
 const W = 560;
 const H = 200;
 const PAD = 10;
@@ -46,6 +54,7 @@ export function PriceChartDialog({
   usdKrw: number | null;
 }) {
   const [range, setRange] = useState<ChartRange>("1D");
+  const [chartType, setChartType] = useState<"line" | "bars">("line");
   const gradientId = useId();
   const coin = symbol ? getCoin(symbol) : undefined;
   const candles = useQuery({
@@ -78,12 +87,25 @@ export function PriceChartDialog({
       const value = rawMax - f * (rawMax - rawMin);
       return { value, y: y(value) };
     });
+    // Dạng cột xanh/đỏ: mỗi cột là giá đóng của một kỳ, cao từ đáy lên tới
+    // giá đó; xanh khi tăng so với kỳ trước, đỏ khi giảm.
+    const ups = columnUps(values);
+    const plotW = W - PAD * 2 - LABEL_W;
+    const bw = Math.max(2, (plotW / points.length) * 0.62);
+    const columns = points.map((p, i) => ({
+      x: x(i) - bw / 2,
+      y: y(p.c),
+      w: bw,
+      h: Math.max(1, H - y(p.c)),
+      up: ups[i] ?? true,
+    }));
     return {
       line,
       area,
       lastX: last ? x(points.length - 1) : 0,
       lastY: last ? y(last.c) : 0,
       ticks,
+      columns,
     };
   }, [points]);
   const change = candles.data?.changePct ?? null;
@@ -140,6 +162,20 @@ export function PriceChartDialog({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
+            <ToggleGroup
+              type="single"
+              value={chartType}
+              onValueChange={(v) => v && setChartType(v as "line" | "bars")}
+              className="mt-1.5 justify-end"
+              aria-label="Kiểu biểu đồ"
+            >
+              <ToggleGroupItem value="line" className="h-7 px-3 text-xs">
+                Đường
+              </ToggleGroupItem>
+              <ToggleGroupItem value="bars" className="h-7 px-3 text-xs">
+                Cột
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </div>
 
@@ -189,17 +225,33 @@ export function PriceChartDialog({
                   </text>
                 </g>
               ))}
-              <path d={chart.area} fill={`url(#${gradientId})`} />
-              <path
-                d={chart.line}
-                fill="none"
-                stroke={up ? "var(--gain)" : "var(--loss)"}
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-              <circle cx={chart.lastX} cy={chart.lastY} r="4" fill={up ? "var(--gain)" : "var(--loss)"} />
-              <circle cx={chart.lastX} cy={chart.lastY} r="8" fill={up ? "var(--gain)" : "var(--loss)"} opacity="0.25" />
+              {chartType === "bars" ? (
+                chart.columns.map((c, i) => (
+                  <rect
+                    key={i}
+                    x={c.x.toFixed(1)}
+                    y={c.y.toFixed(1)}
+                    width={c.w.toFixed(1)}
+                    height={c.h.toFixed(1)}
+                    rx="1.5"
+                    fill={c.up ? "var(--gain)" : "var(--loss)"}
+                  />
+                ))
+              ) : (
+                <>
+                  <path d={chart.area} fill={`url(#${gradientId})`} />
+                  <path
+                    d={chart.line}
+                    fill="none"
+                    stroke={up ? "var(--gain)" : "var(--loss)"}
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                  <circle cx={chart.lastX} cy={chart.lastY} r="4" fill={up ? "var(--gain)" : "var(--loss)"} />
+                  <circle cx={chart.lastX} cy={chart.lastY} r="8" fill={up ? "var(--gain)" : "var(--loss)"} opacity="0.25" />
+                </>
+              )}
             </svg>
           )}
         </div>

@@ -274,19 +274,17 @@ function AccumulatePage() {
                 })}
               </div>
               {selected && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-raised px-4 py-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground">{monthLabel(selected.key)}</div>
-                    <div className="num mt-0.5 text-lg font-bold">
-                      {money(selected.investedUsd)}
-                    </div>
+                <div className="mt-4 rounded-lg bg-surface-raised px-4 py-3">
+                  <div className="text-xs text-muted-foreground">{monthLabel(selected.key)}</div>
+                  <div className="num mt-0.5 text-lg font-bold">
+                    {money(selected.investedUsd)}
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <div>
-                      {selected.buys} lần mua · Avg{" "}
-                      {money(selected.buys ? selected.investedUsd / selected.buys : null)}
-                    </div>
-                    <div className="mt-0.5">Bấm vào cột để xem tháng khác</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {selected.buys} lần mua · Avg{" "}
+                    {money(selected.buys ? selected.investedUsd / selected.buys : null)}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Bấm vào cột để xem tháng khác
                   </div>
                 </div>
               )}

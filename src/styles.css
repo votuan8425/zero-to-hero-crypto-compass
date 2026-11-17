@@ -74,8 +74,69 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Giao diện trắng — chữ tối trên nền trắng, vẫn giữ xanh lá lime làm màu
+ * chủ đạo (đậm hơn một chút để đủ tương phản trên nền trắng). */
 :root {
   --radius: 0.875rem;
+  color-scheme: light;
+  --background: oklch(0.97 0 0);
+  --foreground: oklch(0.16 0 0);
+  --surface: oklch(1 0 0);
+  --surface-raised: oklch(0.94 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: oklch(0.72 0.2 124);
+  --primary-glow: oklch(0.8 0.22 135);
+  --primary-foreground: oklch(0.14 0.02 125);
+  --secondary: oklch(0.93 0 0);
+  --secondary-foreground: oklch(0.16 0 0);
+  --muted: oklch(0.93 0 0);
+  --muted-foreground: oklch(0.46 0 0);
+  --accent: oklch(0.92 0 0);
+  --accent-foreground: oklch(0.16 0 0);
+  --destructive: oklch(0.55 0.22 22);
+  --destructive-foreground: oklch(0.99 0 0);
+  --gain: oklch(0.58 0.18 152);
+  --loss: oklch(0.55 0.21 22);
+  --warning: oklch(0.65 0.16 80);
+  --warning-foreground: oklch(0.2 0.03 80);
+  --info: oklch(0.55 0.12 235);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.85 0 0);
+  --ring: oklch(0.72 0.2 124 / 50%);
+  --chart-1: oklch(0.72 0.2 124);
+  --chart-2: oklch(0.68 0.15 70);
+  --chart-3: oklch(0.6 0.14 235);
+  --chart-4: oklch(0.6 0.2 330);
+  --chart-5: oklch(0.62 0.15 175);
+  --chart-6: oklch(0.58 0.2 25);
+  --chart-7: oklch(0.6 0.16 285);
+  --chart-8: oklch(0.55 0 0);
+  --google-bg: oklch(1 0 0);
+  --google-border: oklch(0.85 0.004 160);
+  --google-text: oklch(0.2 0 0);
+
+  --gradient-hero: radial-gradient(120% 80% at 50% 0%, oklch(0.72 0.2 124 / 14%), transparent 60%);
+  --gradient-card: linear-gradient(160deg, oklch(1 0 0), oklch(0.96 0 0));
+  --gradient-lime: linear-gradient(135deg, var(--primary), var(--primary-glow));
+  --shadow-glow: 0 0 0 1px oklch(0.72 0.2 124 / 25%), 0 12px 40px -12px oklch(0.72 0.2 124 / 30%);
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 80%) inset, 0 20px 40px -24px oklch(0 0 0 / 18%);
+
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: oklch(0.72 0.2 124);
+  --sidebar-primary-foreground: oklch(0.14 0.02 125);
+  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent-foreground: oklch(0.16 0 0);
+  --sidebar-border: oklch(0.88 0 0);
+  --sidebar-ring: oklch(0.72 0.2 124 / 50%);
+}
+
+/* Giao diện tối (mặc định của app) — giá trị cũ, giữ nguyên. */
+:root.dark {
+  color-scheme: dark;
   --background: oklch(0.11 0 0);
   --foreground: oklch(0.97 0 0);
   --surface: oklch(0.155 0 0);
@@ -134,9 +195,6 @@
 @layer base {
   * {
     border-color: var(--color-border);
-  }
-  html {
-    color-scheme: dark;
   }
   body {
     background-color: var(--color-background);
@@ -197,4 +255,37 @@
 
 @utility animate-pulse-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+/** Thanh kéo mảnh, luôn hiện rõ (dùng kèm overflow-y-scroll). */
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+  }
+}
+
+/* Lúc đổi giao diện tối/trắng: chuyển màu nền, viền và chữ mượt mà.
+ * Class này chỉ gắn tạm ~350ms lúc bấm đổi (xem src/lib/theme.ts). */
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease !important;
 }

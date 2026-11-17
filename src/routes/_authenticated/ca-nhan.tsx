@@ -9,8 +9,11 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Moon,
   RefreshCw,
   ShieldCheck,
+  Sun,
+  SunMoon,
   Upload,
   UserRound,
   Wifi,
@@ -44,6 +47,8 @@ import {
   todayKey,
   type Currency,
 } from "@/lib/format";
+import { useTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import { translateAuthError } from "@/lib/auth-errors";
 import { authEmailToUsername, isSyntheticAuthEmail } from "@/lib/username-auth";
 import { displaySymbol } from "@/lib/coins";
@@ -221,6 +226,8 @@ function PersonalPage() {
           </form>
         </Section>
 
+        <ThemeSection />
+
         <Section
           icon={sync.online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
           title="Đồng bộ đám mây"
@@ -285,6 +292,51 @@ function PersonalPage() {
         </Section>
       </div>
     </div>
+  );
+}
+
+/** Giao diện tối / trắng — bấm là đổi ngay, icon mặt trời/mặt trăng xoay và mờ dần vào nhau. */
+function ThemeSection() {
+  const [theme, setTheme] = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <Section
+      icon={<SunMoon className="h-4 w-4" />}
+      title="Giao diện"
+      description="Chọn nền tối hoặc nền trắng cho toàn bộ app. Lựa chọn được lưu trên thiết bị này."
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!isDark}
+          aria-label={isDark ? "Đổi sang giao diện trắng" : "Đổi sang giao diện tối"}
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-surface-raised transition-colors hover:border-primary/50"
+        >
+          <Sun
+            aria-hidden
+            className={cn(
+              "absolute h-5 w-5 text-primary transition-all duration-500",
+              isDark ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-50 opacity-0",
+            )}
+          />
+          <Moon
+            aria-hidden
+            className={cn(
+              "absolute h-5 w-5 text-primary transition-all duration-500",
+              isDark ? "-rotate-90 scale-50 opacity-0" : "rotate-0 scale-100 opacity-100",
+            )}
+          />
+        </button>
+        <div>
+          <div className="text-sm font-medium">{isDark ? "Tối" : "Trắng"}</div>
+          <div className="text-xs text-muted-foreground">
+            {isDark ? "Nền đen, dịu mắt ban đêm." : "Nền trắng, rõ ràng ban ngày."}
+          </div>
+        </div>
+      </div>
+    </Section>
   );
 }
 
