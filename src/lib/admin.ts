@@ -9,8 +9,14 @@
 export const ADMIN_EMAIL = "yuntuan1309@gmail.com";
 export const ADMIN_USERNAME = "yuntuan1309";
 
-/** Synthetic email domain for username-only accounts (never a real mailbox). */
-export const SYNTH_DOMAIN = "zth.local";
+/**
+ * Synthetic email domain for username-only accounts (never a real mailbox).
+ *
+ * PHẢI là domain thật, hợp lệ — Supabase từ chối domain dành riêng như
+ * `.local` ("This email address is not allowed"), nên tài khoản username mới
+ * không tạo được. Dùng luôn domain của app trên Lovable.
+ */
+export const SYNTH_DOMAIN = "zero-to-hero-crypto-compass.lovable.app";
 
 export type AuthUserLike =
   | {

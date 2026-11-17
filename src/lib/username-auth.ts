@@ -2,12 +2,12 @@
  * Username-only accounts.
  *
  * Supabase Auth still needs an email address, so a username is mapped to
- * a synthetic address `<username>@zth.local`. That address is never a
- * real mailbox, so no confirmation email can ever arrive for it — the
- * Supabase "Confirm email" setting must be OFF for these accounts to
- * sign in (see the setup notes). Existing email accounts keep working:
- * anything containing "@" is passed through unchanged, and the admin
- * username maps to the admin's real Gmail so the admin keeps the SAME
+ * a synthetic address `<username>@<SYNTH_DOMAIN>` (domain của app). That
+ * address is never a real mailbox, so no confirmation email can ever arrive
+ * for it — the Supabase "Confirm email" setting must be OFF for these
+ * accounts to sign in (see the setup notes). Existing email accounts keep
+ * working: anything containing "@" is passed through unchanged, and the
+ * admin username maps to the admin's real Gmail so the admin keeps the SAME
  * account and data instead of getting a second, synthetic one.
  */
 import { ADMIN_EMAIL, ADMIN_USERNAME, SYNTH_DOMAIN } from "./admin";
