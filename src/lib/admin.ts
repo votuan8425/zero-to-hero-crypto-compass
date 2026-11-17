@@ -12,11 +12,16 @@ export const ADMIN_USERNAME = "yuntuan1309";
 /**
  * Synthetic email domain for username-only accounts (never a real mailbox).
  *
- * PHẢI là domain thật, hợp lệ — Supabase từ chối domain dành riêng như
- * `.local` ("This email address is not allowed"), nên tài khoản username mới
- * không tạo được. Dùng luôn domain của app trên Lovable.
+ * PHẢI là domain có máy chủ mail (MX record) — Supabase từ chối domain
+ * không nhận được email ("This email address can't receive email because
+ * its domain has no mail server"). Đã thử và bị chặn: `zth.local` (domain
+ * dành riêng) và `zero-to-hero-crypto-compass.lovable.app` + `lovable.app`
+ * (không có MX). `lovable.cloud` (domain nền tảng Lovable Cloud, nơi đặt
+ * Supabase của app) CÓ máy chủ mail và Supabase chấp nhận — đã kiểm chứng
+ * đăng ký thành công 2026-11-18. Email giả này không bao giờ nhận mail thật
+ * (Confirm email đang OFF), chỉ là định danh nội bộ cho Supabase Auth.
  */
-export const SYNTH_DOMAIN = "zero-to-hero-crypto-compass.lovable.app";
+export const SYNTH_DOMAIN = "lovable.cloud";
 
 export type AuthUserLike =
   | {

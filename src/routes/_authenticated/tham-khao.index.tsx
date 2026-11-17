@@ -126,8 +126,8 @@ function AdminAllocationCard({
             {allocation.message}
           </blockquote>
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="lime-gradient grid h-6 w-6 shrink-0 place-items-center rounded-md text-[10px] font-black text-primary-foreground">
-              0→H
+            <span className="lime-gradient grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black text-primary-foreground">
+              A
             </span>
             <span className="font-medium text-foreground">Admin</span>
             {allocation.messageUpdatedAt && (
@@ -164,6 +164,90 @@ function AdminAllocationCard({
 }
 
 const MESSAGE_MAX = 500;
+
+/**
+ * Thẻ xem trước một nhà đầu tư đã đăng — hiện luôn cho mọi người xem,
+ * KHÔNG cần bấm theo dõi trước. Bấm vào thẻ để xem danh mục đầy đủ
+ * (biểu đồ tròn, thống kê, lời nhắn) ở phía dưới. Nút "Theo dõi" chỉ để
+ * ghim nhà đầu tư yêu thích, không phải điều kiện để xem.
+ */
+function InvestorCard({
+  allocation,
+  isSelected,
+  isFollowed,
+  onSelect,
+  onFollow,
+}: {
+  allocation: AdminAllocation;
+  isSelected: boolean;
+  isFollowed: boolean;
+  onSelect: () => void;
+  onFollow: () => void;
+}) {
+  const top = [...allocation.slices]
+    .sort((a, b) => b.percent - a.percent)
+    .slice(0, 3);
+  return (
+    <article
+      onClick={onSelect}
+      className={cn(
+        "panel group cursor-pointer p-4 transition-colors hover:border-primary/50",
+        isSelected && "border-primary/60 ring-1 ring-primary/40",
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span className="lime-gradient grid h-10 w-10 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
+          A
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">Admin</span>
+          <span className="block text-xs text-muted-foreground">
+            Cập nhật {formatDateTime(allocation.updated_at)}
+          </span>
+        </span>
+        {allocation.pnlPct != null && (
+          <PnlText value={allocation.pnlPct} className="num shrink-0 text-sm font-semibold">
+            {allocation.pnlPct >= 0 ? "+" : ""}
+            {formatNumber(allocation.pnlPct, 1)}%
+          </PnlText>
+        )}
+      </div>
+      <div className="mt-3">
+        <DonutChart items={allocation.slices} showLegend={false} height={120} />
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {top.map((s) => (
+          <li key={s.symbol} className="flex items-center gap-2 text-sm">
+            <CoinLogo symbol={s.symbol} size={18} />
+            <span className="flex-1">{displaySymbol(s.symbol)}</span>
+            <span className="num text-muted-foreground">{formatPercent(s.percent)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+        <span className="text-xs text-muted-foreground">
+          {allocation.slices.length} token
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFollow();
+          }}
+          aria-pressed={isFollowed}
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+            isFollowed
+              ? "bg-primary text-primary-foreground"
+              : "bg-surface-raised text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {isFollowed ? "Đang theo dõi" : "Theo dõi"}
+        </button>
+      </div>
+    </article>
+  );
+}
 
 /** Dialog để admin viết/sửa lời nhắn của nhà đầu tư (để trống để gỡ). */
 function AdminMessageDialog({
@@ -380,61 +464,27 @@ function ReferencesPage() {
           : "Chỉ admin mới được thêm/sửa danh mục tham khảo. Bạn chỉ xem tỷ lệ % danh mục của admin — không thấy số tiền, số lượng hay ghi chú của admin."}
       </div>
 
-      {/* Danh sách nhà đầu tư đã đăng — chỉ admin mới đăng được (RLS), nên
-          hiện danh sách chỉ có admin sau khi họ bấm "Đăng portfolio". Bấm
-          một nhà đầu tư là theo dõi + xem danh mục của họ như hiện tại. */}
+      {/* Danh sách nhà đầu tư đã đăng — hiện tất cả dưới dạng lưới thẻ, mỗi
+          thẻ là một bản xem trước danh mục (biểu đồ tròn + top token + lãi/lỗ).
+          Xem được ngay, không cần theo dõi trước; bấm một thẻ để xem danh mục
+          đầy đủ của nhà đầu tư đó ở phía dưới. Nút "Theo dõi" chỉ để ghim. */}
       {investors.length > 0 && (
         <section className="mb-5">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider">
             Nhà đầu tư · {investors.length}
           </h2>
-          <ul className="space-y-2">
-            {investors.map((inv) => {
-              const isSelected = selected?.user_id === inv.user_id;
-              const isFollowed = followedId === inv.user_id;
-              return (
-                <li key={inv.user_id}>
-                  <button
-                    type="button"
-                    onClick={() => followInvestor(inv.user_id)}
-                    aria-pressed={isFollowed}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors",
-                      isSelected
-                        ? "border-primary/60 bg-primary/10"
-                        : "border-border bg-surface hover:border-primary/40",
-                    )}
-                  >
-                    <span className="lime-gradient grid h-10 w-10 shrink-0 place-items-center rounded-lg text-xs font-black text-primary-foreground">
-                      0→H
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">Admin</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Cập nhật {formatDateTime(inv.updated_at)} · {inv.slices.length} token
-                      </span>
-                    </span>
-                    {inv.pnlPct != null && (
-                      <PnlText value={inv.pnlPct} className="num shrink-0 text-sm font-semibold">
-                        {inv.pnlPct >= 0 ? "+" : ""}
-                        {formatNumber(inv.pnlPct, 1)}%
-                      </PnlText>
-                    )}
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
-                        isFollowed
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-surface-raised text-muted-foreground",
-                      )}
-                    >
-                      {isFollowed ? "Đang theo dõi" : "Theo dõi"}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {investors.map((inv) => (
+              <InvestorCard
+                key={inv.user_id}
+                allocation={inv}
+                isSelected={selected?.user_id === inv.user_id}
+                isFollowed={followedId === inv.user_id}
+                onSelect={() => followInvestor(inv.user_id)}
+                onFollow={() => followInvestor(inv.user_id)}
+              />
+            ))}
+          </div>
         </section>
       )}
 
@@ -461,27 +511,36 @@ function ReferencesPage() {
         onSave={(message) => void saveMessage(message)}
       />
 
-      {!admin ? null : refs.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-40" />
-          <Skeleton className="h-40" />
-        </div>
-      ) : list.length === 0 ? (
-        <EmptyState
-          icon={<BookMarked className="h-6 w-6" />}
-          title="Chưa có danh mục tham khảo"
-          description="Tải ảnh chụp danh mục của một nhà đầu tư, AI sẽ trích xuất các coin và tỷ lệ phân bổ cho bạn."
-          action={
-            <Button asChild variant="hero">
-              <Link to="/tham-khao/moi">
-                <Plus /> Tải ảnh danh mục
-              </Link>
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((r, idx) => {
+      {/* Danh mục tham khảo từ ảnh chụp (tính năng riêng của admin: tải ảnh
+          chụp danh mục của một nhà đầu tư, AI trích xuất coin + tỷ lệ) —
+          KHÁC với danh mục đã đăng ở trên. Tiêu đề rõ ràng để không nhầm
+          với "chưa có danh mục nào" khi danh mục đã đăng vẫn đang hiện. */}
+      {!admin ? null : (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider">
+            Danh mục tham khảo từ ảnh chụp
+          </h2>
+          {refs.isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-40" />
+              <Skeleton className="h-40" />
+            </div>
+          ) : list.length === 0 ? (
+            <EmptyState
+              icon={<BookMarked className="h-6 w-6" />}
+              title="Chưa có ảnh danh mục tham khảo"
+              description="Tải ảnh chụp danh mục của một nhà đầu tư, AI sẽ trích xuất các coin và tỷ lệ phân bổ cho bạn."
+              action={
+                <Button asChild variant="hero">
+                  <Link to="/tham-khao/moi">
+                    <Plus /> Tải ảnh danh mục
+                  </Link>
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {list.map((r, idx) => {
             const sorted = [...r.holdings]
               .filter((h) => h.percent != null)
               .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0));
@@ -525,6 +584,8 @@ function ReferencesPage() {
             );
           })}
         </div>
+      )}
+        </section>
       )}
     </div>
   );
