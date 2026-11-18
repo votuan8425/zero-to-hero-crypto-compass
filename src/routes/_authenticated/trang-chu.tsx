@@ -180,7 +180,7 @@ function HomePage() {
             </div>
           </div>
           {holdings.length > 0 && (
-            <div className="aspect-[2/1] w-[46%] shrink-0 sm:w-[48%] md:w-[52%]">
+            <div className="aspect-[2/1] w-[40%] shrink-0 sm:w-[42%] md:w-[46%]">
               {txs.isLoading || historyQuery.isLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : history && history.points.length > 0 ? (
