@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getPrices, type PricesResult } from "@/lib/prices.functions";
 import { fetchPricesFromBrowser } from "@/lib/market-client";
+import { applyMetalsFreeze } from "@/lib/metals";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfolio";
 import { normalizeCurrency, type Currency } from "@/lib/format";
@@ -17,6 +18,7 @@ function readPriceCache(): PricesResult | null {
     return null;
   }
 }
+
 
 /** Live prices, refreshed every minute; falls back to the last known prices when offline.
  *  Tách riêng thành pricesQuery để màn hình chờ (boot) prefetch được giá
@@ -52,6 +54,8 @@ export const pricesQuery = queryOptions({
       }
       return cached ? stale(cached) : res;
     }
+    // Vàng/bạc: chốt giá theo khung 6h/22h trước khi ghi cache dùng chung.
+    res = applyMetalsFreeze(res);
     localStorage.setItem(
       PRICE_CACHE,
       JSON.stringify({

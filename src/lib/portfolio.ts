@@ -19,6 +19,9 @@ export interface PriceQuote {
   vnd: number;
   krw: number;
   change24h: number | null;
+  /** Giá mua vào / bán ra (VND) — chỉ vàng/bạc, khi nguồn giá cho bid/ask. */
+  bidVnd?: number | null;
+  askVnd?: number | null;
 }
 
 export type PriceMap = Record<string, PriceQuote>;

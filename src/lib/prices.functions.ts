@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { COINS } from "./coins";
+import { deriveBidAsk, GOLD_SYMBOL, SILVER_SYMBOL } from "./metals";
 import type { PriceMap } from "./portfolio";
+
+// Ký hiệu vàng/bạc giữ nguyên đường import cũ cho các file khác dùng.
+export { GOLD_SYMBOL, SILVER_SYMBOL } from "./metals";
 
 export interface PricesResult {
   prices: PriceMap;
@@ -38,26 +42,16 @@ async function fxRates(): Promise<{ vnd: number | null; krw: number | null }> {
   }
 }
 
-/**
- * Vàng: PAXG trên OKX làm proxy (1 PAXG ≈ 1 ounce vàng). Nằm trong COINS
- * nên xuất hiện trong danh sách chọn khi thêm lần mua, ngay sau ETH.
- */
-export const GOLD_SYMBOL = "PAXG";
-
-/**
- * Bạc: KAG (Kinesis Silver) trên CoinGecko làm proxy (1 KAG ≈ 1 ounce bạc).
- * OKX không có cặp bạc nào (đã kiểm chứng 2026-11-17: không có XAG/KAG/SLV
- * trong bảng tickers SPOT), nên bạc chỉ lấy từ CoinGecko, không qua OKX.
- */
-export const SILVER_SYMBOL = "KAG";
-
-/** Spot prices from OKX (USDT pairs ≈ USD). */
-async function okxPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
-  const j = await fetchJson<{ data?: { instId: string; last: string; open24h: string }[] }>(
-    "https://www.okx.com/api/v5/market/tickers?instType=SPOT",
-  );
+/** Spot prices from OKX (USDT pairs ≈ USD). Vàng kèm bid/ask thật từ sổ lệnh. */
+async function okxPrices(): Promise<
+  Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }>
+> {
+  const j = await fetchJson<{
+    data?: { instId: string; last: string; open24h: string; bidPx?: string; askPx?: string }[]
+  }>("https://www.okx.com/api/v5/market/tickers?instType=SPOT");
   const bySymbol = new Map((j.data ?? []).map((t) => [t.instId, t]));
-  const out: Record<string, { usd: number; change24h: number | null }> = {};
+  const out: Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }> =
+    {};
   for (const c of COINS) {
     if (c.symbol === "USDT") {
       out[c.symbol] = { usd: 1, change24h: 0 };
@@ -67,9 +61,14 @@ async function okxPrices(): Promise<Record<string, { usd: number; change24h: num
     const last = t ? Number(t.last) : NaN;
     const open = t ? Number(t.open24h) : NaN;
     if (Number.isFinite(last) && last > 0) {
+      const bid = t ? Number(t.bidPx) : NaN;
+      const ask = t ? Number(t.askPx) : NaN;
       out[c.symbol] = {
         usd: last,
         change24h: Number.isFinite(open) && open > 0 ? ((last - open) / open) * 100 : null,
+        // Chỉ vàng cần giá mua/bán; bid/ask của các coin khác không dùng tới.
+        ...(c.symbol === GOLD_SYMBOL && Number.isFinite(bid) && bid > 0 ? { bid } : {}),
+        ...(c.symbol === GOLD_SYMBOL && Number.isFinite(ask) && ask > 0 ? { ask } : {}),
       };
     }
   }
@@ -113,6 +112,30 @@ async function kagGeckoPrice(): Promise<{ usd: number; change24h: number | null 
   return null;
 }
 
+/**
+ * % chênh lệch mua/bán của bạc từ CoinGecko tickers — endpoint này không cho
+ * sẵn giá bid/ask, chỉ cho spread % (đã kiểm chứng 2026-11-18: ticker
+ * KAG/C1USD của Kinesis Money trả spread, ví dụ 0,113676%).
+ * Dùng kèm giá last từ market_chart để suy ra bid/ask (xem deriveBidAsk).
+ */
+async function kagSpreadPct(): Promise<number | null> {
+  try {
+    const j = await fetchJson<{
+      tickers?: { target?: string; bid_ask_spread_percentage?: number }[];
+    }>("https://api.coingecko.com/api/v3/coins/kinesis-silver/tickers");
+    const tickers = j.tickers ?? [];
+    const t =
+      tickers.find((x) => x.target === "C1USD") ??
+      tickers.find((x) => x.target === "USD" || x.target === "USDT" || x.target === "USDC") ??
+      tickers[0];
+    const s = t?.bid_ask_spread_percentage;
+    return typeof s === "number" && Number.isFinite(s) && s >= 0 ? s : null;
+  } catch (e) {
+    console.error("kag tickers failed", e);
+    return null;
+  }
+}
+
 async function geckoPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
   const ids = COINS.map((c) => c.geckoId).join(",");
   const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
@@ -130,7 +153,8 @@ async function geckoPrices(): Promise<Record<string, { usd: number; change24h: n
 export const getPrices = createServerFn({ method: "GET" }).handler(
   async (): Promise<PricesResult> => {
     const ratePromise = fxRates();
-    let usd: Record<string, { usd: number; change24h: number | null }> = {};
+    let usd: Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }> =
+      {};
     try {
       usd = await okxPrices();
     } catch (e) {
@@ -160,9 +184,13 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
       if (paxg) usd[GOLD_SYMBOL] = paxg;
     }
     // Bạc: OKX không có cặp bạc nên luôn lấy từ CoinGecko nếu chưa có giá.
+    // Kèm % spread từ tickers để suy ra giá mua/bán (không bịa spread).
     if (!usd[SILVER_SYMBOL]) {
-      const kag = await kagGeckoPrice();
-      if (kag) usd[SILVER_SYMBOL] = kag;
+      const [kag, spread] = await Promise.all([kagGeckoPrice(), kagSpreadPct()]);
+      if (kag) {
+        usd[SILVER_SYMBOL] =
+          spread != null ? { ...kag, ...deriveBidAsk(kag.usd, spread) } : kag;
+      }
     }
     const fx = await ratePromise;
     const usdVnd = fx.vnd;
@@ -174,6 +202,9 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
         vnd: usdVnd ? q.usd * usdVnd : 0,
         krw: usdKrw ? q.usd * usdKrw : 0,
         change24h: q.change24h,
+        // Giá mua/bán vàng/bạc luôn quy ra VND ngay từ lúc tải.
+        ...(q.bid != null && usdVnd ? { bidVnd: q.bid * usdVnd } : {}),
+        ...(q.ask != null && usdVnd ? { askVnd: q.ask * usdVnd } : {}),
       };
     }
     const error =

@@ -24,6 +24,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { COINS, getCoin } from "@/lib/coins";
 import { saveTransaction } from "@/lib/data";
+import { isMetalSymbol } from "@/lib/metals";
 import { formatMoney, todayKey, type Currency } from "@/lib/format";
 import type { Tx } from "@/lib/portfolio";
 import { usePrices } from "@/hooks/use-app-data";
@@ -65,10 +66,13 @@ export function TransactionDialog({
 
   useEffect(() => {
     if (!open) return;
-    setCur(defaultCurrency);
+    // Vàng/bạc luôn nhập giá bằng VND.
+    const baseCur: Currency =
+      existing && isMetalSymbol(existing.symbol) ? "VND" : defaultCurrency;
+    setCur(baseCur);
     if (existing) {
-      const r = rateFor(defaultCurrency) ?? 1;
-      const useCur: Currency = rateFor(defaultCurrency) ? defaultCurrency : "USDT";
+      const r = rateFor(baseCur) ?? 1;
+      const useCur: Currency = rateFor(baseCur) ? baseCur : "USDT";
       setCur(useCur);
       setSymbol(existing.symbol);
       setQty(String(existing.quantity));
@@ -163,7 +167,14 @@ export function TransactionDialog({
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Đồng coin</Label>
-            <Select value={symbol} onValueChange={setSymbol}>
+            <Select
+              value={symbol}
+              onValueChange={(v) => {
+                setSymbol(v);
+                // Đổi sang vàng/bạc thì nhập giá bằng VND.
+                if (isMetalSymbol(v)) setCur("VND");
+              }}
+            >
               <SelectTrigger className="h-11">
                 <SelectValue />
               </SelectTrigger>
