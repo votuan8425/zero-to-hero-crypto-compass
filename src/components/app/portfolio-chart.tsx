@@ -1,6 +1,9 @@
 /**
- * Biểu đồ xu hướng tổng giá trị tài sản kiểu OKX: đường + vùng chấm
- * (lưới chấm như OKX) dưới đường, màu xanh khi kỳ đang tăng, đỏ khi giảm.
+ * Biểu đồ xu hướng tổng giá trị tài sản kiểu OKX: đường thẳng nối từng
+ * điểm (đỉnh nhọn như OKX, không bo cong) + vùng chấm dưới đường, màu
+ * xanh khi kỳ đang tăng, hồng neon khi giảm. Độ mềm của OKX đến từ viền
+ * sáng (halo) quanh đường — 2 lớp phát sáng chồng nhau — chứ không phải
+ * từ việc bo tròn đường.
  *
  * Tương tác: rê chuột (hoặc chạm kéo trên điện thoại) → đường kẻ dọc +
  * chấm tròn tại điểm gần nhất, giá trị và thời điểm hiện ở tiêu đề phía
@@ -23,32 +26,6 @@ const PAD_BOTTOM = 12;
 /** Khoảng cách lưới chấm kiểu OKX (px trong khung viewBox). */
 const DOT_STEP = 12;
 const DOT_R = 1.5;
-
-const fmt = (v: number) => Number(v.toFixed(1));
-
-/**
- * Đường cong mềm qua các điểm (Catmull-Rom → Bezier): đường đi qua đúng
- * từng điểm nhưng bo tròn ở khớp nối, không gãy khúc như nối thẳng —
- * nhìn mềm như chart OKX thay vì thô và cứng.
- */
-export function smoothLinePath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return "";
-  const p = pts.map((q) => ({ x: fmt(q.x), y: fmt(q.y) }));
-  if (p.length === 2) return `M${p[0]!.x},${p[0]!.y} L${p[1]!.x},${p[1]!.y}`;
-  let d = `M${p[0]!.x},${p[0]!.y}`;
-  for (let i = 0; i < p.length - 1; i++) {
-    const p0 = p[Math.max(0, i - 1)]!;
-    const p1 = p[i]!;
-    const p2 = p[i + 1]!;
-    const p3 = p[Math.min(p.length - 1, i + 2)]!;
-    const c1x = fmt(p1.x + (p2.x - p0.x) / 6);
-    const c1y = fmt(p1.y + (p2.y - p0.y) / 6);
-    const c2x = fmt(p2.x - (p3.x - p1.x) / 6);
-    const c2y = fmt(p2.y - (p3.y - p1.y) / 6);
-    d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
-  }
-  return d;
-}
 
 export function PortfolioChart({
   points,
@@ -85,7 +62,9 @@ export function PortfolioChart({
     const line =
       points.length === 1
         ? `M${PAD_X},${y(points[0]!.value).toFixed(1)} L${W - PAD_X},${y(points[0]!.value).toFixed(1)}`
-        : smoothLinePath(points.map((p, i) => ({ x: x(i), y: y(p.value) })));
+        : points
+            .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`)
+            .join(" ");
     const area =
       points.length === 1
         ? ""
@@ -120,7 +99,7 @@ export function PortfolioChart({
   const hovered = hoverIdx != null ? points[hoverIdx] : null;
 
   return (
-    <div className={cn("h-full w-full", up ? "text-gain" : "text-loss", className)}>
+    <div className={cn("h-full w-full", up ? "text-gain" : "text-chart-down", className)}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -143,7 +122,7 @@ export function PortfolioChart({
               cy={DOT_STEP / 2}
               r={DOT_R}
               fill="currentColor"
-              fillOpacity="0.5"
+              fillOpacity="0.6"
             />
           </pattern>
         </defs>
@@ -157,7 +136,10 @@ export function PortfolioChart({
               strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
-              style={{ filter: "drop-shadow(0 0 7px currentColor)" }}
+              style={{
+                filter:
+                  "drop-shadow(0 0 6px currentColor) drop-shadow(0 0 16px currentColor)",
+              }}
             />
             {hovered && hoverIdx != null && (
               <g>

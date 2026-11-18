@@ -186,36 +186,6 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
   });
 });
 
-import { smoothLinePath } from "@/components/app/portfolio-chart";
-
-describe("đường cong mềm cho chart", () => {
-  it("2 điểm thì là đường thẳng", () => {
-    expect(
-      smoothLinePath([
-        { x: 0, y: 0 },
-        { x: 10, y: 10 },
-      ]),
-    ).toBe("M0,0 L10,10");
-  });
-
-  it("nhiều điểm thì dùng Bezier, bắt đầu và kết thúc đúng điểm", () => {
-    const d = smoothLinePath([
-      { x: 0, y: 0 },
-      { x: 10, y: 10 },
-      { x: 20, y: 0 },
-      { x: 30, y: 10 },
-    ]);
-    expect(d.startsWith("M0,0")).toBe(true);
-    expect(d).toContain(" C");
-    expect(d.endsWith("30,10")).toBe(true);
-  });
-
-  it("ít hơn 2 điểm thì rỗng", () => {
-    expect(smoothLinePath([])).toBe("");
-    expect(smoothLinePath([{ x: 0, y: 0 }])).toBe("");
-  });
-});
-
 describe("neo chuỗi giá thế giới về giá trong nước", () => {
   it("nhân hệ số để điểm cuối khớp giá hiện tại, giữ tỉ lệ xu hướng", () => {
     const s = rescaleSeriesToCurrent(
