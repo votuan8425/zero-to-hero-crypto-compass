@@ -22,6 +22,13 @@
       "when": 1794979526700,
       "tag": "0002_restrict_admin_allocation_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794979965191,
+      "tag": "0003_pin_search_path_auto_confirm",
+      "breakpoints": true
     }
   ]
 }
