@@ -15,13 +15,25 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
+import { PortfolioChart } from "@/components/app/portfolio-chart";
 import { PriceChartDialog } from "@/components/app/price-chart-dialog";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
+import { usePortfolioHistory } from "@/hooks/use-portfolio-history";
 import { computeMonthlyStreak, groupByMonth, monthKeyOf, monthLabel } from "@/lib/accumulation";
 import type { PriceMap } from "@/lib/portfolio";
+import {
+  HISTORY_PERIODS,
+  computePortfolioHistory,
+  historyPeriodDays,
+  historyPeriodLabel,
+  withLiveEndpoint,
+  type HistoryPeriod,
+  type HistoryPoint,
+} from "@/lib/portfolio-history";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { COINS, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
 import { loadFavorites, saveFavorites, toggleFavorite } from "@/lib/favorites";
@@ -78,6 +90,22 @@ function HomePage() {
   const money = (usd: number | null, compact = false) =>
     formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency, { compact });
 
+  // Biểu đồ xu hướng tổng giá trị tài sản kiểu OKX.
+  const [period, setPeriod] = useState<HistoryPeriod>("1M");
+  const [hovered, setHovered] = useState<HistoryPoint | null>(null);
+  const heldSymbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
+  const historyQuery = usePortfolioHistory(heldSymbols, prices.data?.prices);
+  const history = useMemo(() => {
+    if (!historyQuery.data) return null;
+    const toMs = Date.now();
+    const fromMs = toMs - historyPeriodDays(period) * 86_400_000;
+    const series = period === "1Y" ? historyQuery.data.weekly : historyQuery.data.daily;
+    const h = computePortfolioHistory(txs.data ?? [], series, fromMs, toMs);
+    // Chốt điểm cuối bằng tổng giá trị hiện tại để đường chạm đúng số đang hiện.
+    return withLiveEndpoint(h, toMs, totals.valueUsd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyQuery.data, period, txs.data, totals.valueUsd]);
+
   const showLegacy = (legacy.data?.length ?? 0) > 0 && !profile?.local_migrated_at;
 
   return (
@@ -111,17 +139,71 @@ function HomePage() {
 
       <section className="panel hero-glow relative overflow-hidden p-5 md:p-7">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Tổng tài sản
+          Tổng giá trị ước tính
         </div>
         {txs.isLoading ? (
           <Skeleton className="mt-3 h-10 w-56" />
         ) : (
           <div className="num mt-2 text-3xl font-bold tracking-tight md:text-5xl">
-            {totals.valueUsd != null
-              ? money(totals.valueUsd)
-              : holdings.length === 0
-                ? money(0)
-                : "—"}
+            {hovered != null && history && history.points.length > 0
+              ? money(hovered.value)
+              : totals.valueUsd != null
+                ? money(totals.valueUsd)
+                : holdings.length === 0
+                  ? money(0)
+                  : "—"}
+          </div>
+        )}
+        <div className="mt-2 text-sm">
+          {hovered != null ? (
+            <span className="text-muted-foreground">{formatDateTime(hovered.t)}</span>
+          ) : history && history.points.length > 0 ? (
+            <>
+              <span className="text-muted-foreground">PNL trong {historyPeriodLabel(period)} </span>
+              <PnlText value={history.pnl} className="font-semibold">
+                {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
+              </PnlText>
+            </>
+          ) : (
+            <span className="text-muted-foreground">PNL trong {historyPeriodLabel(period)} —</span>
+          )}
+        </div>
+        {holdings.length > 0 && (
+          <div className="mt-2">
+            {txs.isLoading || historyQuery.isLoading ? (
+              <Skeleton className="h-[180px] w-full" />
+            ) : history && history.points.length > 0 ? (
+              <PortfolioChart points={history.points} onHover={setHovered} />
+            ) : (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {historyQuery.isError
+                  ? "Không tải được lịch sử giá. Kiểm tra mạng rồi mở lại trang."
+                  : "Chưa có dữ liệu lịch sử để vẽ xu hướng."}
+              </p>
+            )}
+            <div className="mt-1 flex justify-center">
+              <ToggleGroup
+                type="single"
+                size="sm"
+                value={period}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  setPeriod(v as HistoryPeriod);
+                  setHovered(null);
+                }}
+                className="gap-0 rounded-full bg-muted p-1"
+              >
+                {HISTORY_PERIODS.map((p) => (
+                  <ToggleGroupItem
+                    key={p}
+                    value={p}
+                    className="h-8 rounded-full px-3 text-xs font-medium hover:bg-background/70 hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground"
+                  >
+                    {p}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
           </div>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
