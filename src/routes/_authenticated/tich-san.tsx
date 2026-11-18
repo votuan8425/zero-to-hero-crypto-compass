@@ -45,7 +45,7 @@ import {
 } from "@/lib/accumulation";
 import type { Tx } from "@/lib/portfolio";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
-import { quantityUnit } from "@/lib/coins";
+import { getCoin, quantityUnit } from "@/lib/coins";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tich-san")({
@@ -397,8 +397,26 @@ function AccumulatePage() {
                               )}
                             </div>
                             <div className="num whitespace-nowrap overflow-hidden text-xs text-muted-foreground">
-                              Giá {money(t.price_usd)} · Tổng{" "}
-                              {money(t.quantity * t.price_usd + t.fee_usd)}
+                              {getCoin(t.symbol)?.unit ? (
+                                // Vàng/bạc luôn hiển thị bằng VND (giá VND chính xác nếu có).
+                                <>
+                                  Giá {formatMoney(t.price_vnd ?? (usdVnd ? t.price_usd * usdVnd : null), "VND")}{" "}
+                                  · Tổng{" "}
+                                  {formatMoney(
+                                    t.price_vnd != null
+                                      ? t.quantity * t.price_vnd + (t.fee_vnd ?? 0)
+                                      : usdVnd
+                                        ? (t.quantity * t.price_usd + t.fee_usd) * usdVnd
+                                        : null,
+                                    "VND",
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  Giá {money(t.price_usd)} · Tổng{" "}
+                                  {money(t.quantity * t.price_usd + t.fee_usd)}
+                                </>
+                              )}
                               {t.note ? ` · ${t.note}` : ""}
                             </div>
                           </div>

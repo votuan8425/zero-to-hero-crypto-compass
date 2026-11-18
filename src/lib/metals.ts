@@ -75,3 +75,26 @@ export function parseAncaratSilver(html: string): MetalQuote | null {
   if (!(sell > 0) || !(buy > 0)) return null;
   return { bidVnd: buy, askVnd: sell, change24h: null, source: "Ancarat" };
 }
+
+/** Giờ cập nhật giá vàng/bạc mỗi ngày theo giờ Việt Nam (UTC+7). */
+export const METAL_UPDATE_HOURS_VN = [6, 22] as const;
+const VN_OFFSET_MS = 7 * 3_600_000;
+
+/**
+ * Mốc cập nhật gần nhất (≤ now): 06:00 hoặc 22:00 giờ Việt Nam.
+ * Giữa hai mốc, giá vàng/bạc giữ nguyên theo mốc này.
+ */
+export function metalSlotAt(now: Date): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const y = vn.getUTCFullYear();
+  const m = vn.getUTCMonth();
+  const d = vn.getUTCDate();
+  const candidates: number[] = [];
+  for (const dayShift of [0, -1]) {
+    for (const h of METAL_UPDATE_HOURS_VN) {
+      candidates.push(Date.UTC(y, m, d + dayShift, h) - VN_OFFSET_MS);
+    }
+  }
+  const best = Math.max(...candidates.filter((t) => t <= now.getTime()));
+  return new Date(best);
+}

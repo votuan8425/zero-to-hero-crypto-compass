@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COINS, coinName, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
-import { parseAncaratSilver, parsePnjSjc, parseSjcGold } from "@/lib/metals";
+import { metalSlotAt, parseAncaratSilver, parsePnjSjc, parseSjcGold } from "@/lib/metals";
 import { GOLD_SYMBOL, SILVER_SYMBOL } from "@/lib/prices.functions";
 import { computeAllocation, computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
 
@@ -143,5 +143,64 @@ describe("giá vàng SJC và bạc Ancarat", () => {
     expect(parseSjcGold({ data: [] })).toBeNull();
     expect(parseAncaratSilver("<html></html>")).toBeNull();
     expect(parsePnjSjc({ data: [] })).toBeNull();
+  });
+});
+
+describe("giá vàng bạc chỉ cập nhật lúc 6:00 và 22:00 giờ Việt Nam", () => {
+  // Giờ Việt Nam = UTC+7: 06:00 VN = 23:00 UTC hôm trước, 22:00 VN = 15:00 UTC.
+  it("13:44 giờ VN vẫn dùng giá mốc 06:00 sáng cùng ngày", () => {
+    const slot = metalSlotAt(new Date("2026-11-18T06:44:00Z"));
+    expect(slot.toISOString()).toBe("2026-11-17T23:00:00.000Z");
+  });
+
+  it("đúng 22:00 giờ VN chuyển sang mốc 22:00", () => {
+    expect(metalSlotAt(new Date("2026-11-18T15:00:00Z")).toISOString()).toBe(
+      "2026-11-18T15:00:00.000Z",
+    );
+  });
+
+  it("21:59 giờ VN vẫn là mốc 06:00", () => {
+    expect(metalSlotAt(new Date("2026-11-18T14:59:00Z")).toISOString()).toBe(
+      "2026-11-17T23:00:00.000Z",
+    );
+  });
+
+  it("03:00 sáng giờ VN dùng mốc 22:00 tối hôm trước", () => {
+    // 03:00 VN ngày 19 = 20:00 UTC ngày 18.
+    expect(metalSlotAt(new Date("2026-11-18T20:00:00Z")).toISOString()).toBe(
+      "2026-11-18T15:00:00.000Z",
+    );
+  });
+});
+
+describe("vàng bạc luôn tính bằng VND", () => {
+  it("vốn và lãi/lỗ VND không đổi theo tỷ giá", () => {
+    const holdings = computeHoldings(
+      [
+        tx({
+          symbol: "PAXG",
+          coin_name: "Vàng",
+          quantity: 2,
+          price_usd: 520,
+          price_vnd: 13_723_000,
+          fee_vnd: 0,
+        }),
+      ],
+      { PAXG: { usd: 510, vnd: 13_420_000, krw: 0, change24h: null, askVnd: 13_723_000 } },
+    );
+    const g = holdings[0];
+    expect(g?.investedVnd).toBe(27_446_000);
+    expect(g?.avgCostVnd).toBe(13_723_000);
+    expect(g?.valueVnd).toBe(26_840_000);
+    expect(g?.pnlVnd).toBe(-606_000);
+  });
+
+  it("lần mua cũ không có giá VND thì không bịa vốn VND", () => {
+    const holdings = computeHoldings(
+      [tx({ symbol: "KAG", coin_name: "Bạc", quantity: 1, price_usd: 60 })],
+      { KAG: { usd: 59, vnd: 1_545_000, krw: 0, change24h: null } },
+    );
+    expect(holdings[0]?.investedVnd).toBeNull();
+    expect(holdings[0]?.valueVnd).toBe(1_545_000);
   });
 });

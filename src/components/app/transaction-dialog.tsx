@@ -66,7 +66,19 @@ export function TransactionDialog({
   useEffect(() => {
     if (!open) return;
     setCur(defaultCurrency);
-    if (existing) {
+    if (existing && getCoin(existing.symbol)?.unit) {
+      // Vàng/bạc: luôn VND, ưu tiên giá VND chính xác đã lưu.
+      const r = usdVnd ?? 0;
+      setCur("VND");
+      setSymbol(existing.symbol);
+      setQty(String(existing.quantity));
+      const pv = existing.price_vnd ?? (r ? existing.price_usd * r : NaN);
+      const fv = existing.fee_vnd ?? (r ? existing.fee_usd * r : 0);
+      setPrice(Number.isFinite(pv) ? String(Math.round(pv)) : "");
+      setFee(fv ? String(Math.round(fv)) : "");
+      setDate(existing.tx_date);
+      setNote(existing.note ?? "");
+    } else if (existing) {
       const r = rateFor(defaultCurrency) ?? 1;
       const useCur: Currency = rateFor(defaultCurrency) ? defaultCurrency : "USDT";
       setCur(useCur);
@@ -77,6 +89,7 @@ export function TransactionDialog({
       setDate(existing.tx_date);
       setNote(existing.note ?? "");
     } else {
+      if (getCoin(symbol)?.unit) setCur("VND");
       setQty("");
       setPrice("");
       setFee("");
@@ -133,6 +146,9 @@ export function TransactionDialog({
           quantity: q,
           price_usd: toUsd(p),
           fee_usd: toUsd(f || 0),
+          // Vàng/bạc luôn nhập bằng VND: lưu số VND chính xác.
+          price_vnd: metal ? p : null,
+          fee_vnd: metal ? f || 0 : null,
           tx_date: date,
           note: note.trim() || null,
         },
@@ -208,6 +224,9 @@ export function TransactionDialog({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="price">Giá mua mỗi {metal?.unit ?? displaySymbol(symbol)}</Label>
+              {metal ? (
+                <span className="text-xs font-semibold text-muted-foreground">VND</span>
+              ) : (
               <ToggleGroup
                 type="single"
                 size="sm"
@@ -224,6 +243,7 @@ export function TransactionDialog({
                   KRW
                 </ToggleGroupItem>
               </ToggleGroup>
+              )}
             </div>
             <div className="flex gap-2">
               <Input

@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { COINS } from "./coins";
-import { parseAncaratSilver, parsePnjSjc, parseSjcGold, type MetalQuote } from "./metals";
 import type { PriceMap } from "./portfolio";
 
 export interface PricesResult {
@@ -77,52 +76,6 @@ async function okxPrices(): Promise<Record<string, { usd: number; change24h: num
   return out;
 }
 
-/** Giá vàng SJC mỗi chỉ: trang SJC trước, bị chặn thì lấy dòng "Vàng miếng SJC" ở PNJ. */
-async function sjcGold(): Promise<MetalQuote | null> {
-  try {
-    const res = await fetch("https://sjc.com.vn/GoldPrice/Services/PriceService.ashx", {
-      method: "POST",
-      headers: {
-        "user-agent": BROWSER_UA,
-        accept: "application/json",
-        "x-requested-with": "XMLHttpRequest",
-        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-      },
-      body: "method=GetCurrentGoldPricesByBranch&BranchId=1",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (res.ok) {
-      const q = parseSjcGold(await res.json());
-      if (q) return q;
-    }
-  } catch (e) {
-    console.error("sjc gold failed", e);
-  }
-  try {
-    return parsePnjSjc(
-      await fetchJson("https://edge-api.pnj.io/ecom-frontend/v1/get-gold-price?zone=00"),
-    );
-  } catch (e) {
-    console.error("pnj sjc failed", e);
-  }
-  return null;
-}
-
-/** Giá bạc Ancarat mỗi lượng, đọc từ bảng giá công khai giabac.ancarat.com. */
-async function ancaratSilver(): Promise<MetalQuote | null> {
-  try {
-    const res = await fetch("https://giabac.ancarat.com/", {
-      headers: { "user-agent": BROWSER_UA, accept: "text/html" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return parseAncaratSilver(await res.text());
-  } catch (e) {
-    console.error("ancarat silver failed", e);
-  }
-  return null;
-}
-
 async function geckoPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
   const ids = COINS.map((c) => c.geckoId).join(",");
   const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
@@ -140,8 +93,13 @@ async function geckoPrices(): Promise<Record<string, { usd: number; change24h: n
 export const getPrices = createServerFn({ method: "GET" }).handler(
   async (): Promise<PricesResult> => {
     const ratePromise = fxRates();
-    const goldPromise = sjcGold();
-    const silverPromise = ancaratSilver();
+    // Vàng/bạc: giá theo mốc 06:00 / 22:00 giờ Việt Nam đã lưu trên máy chủ.
+    const metalsPromise = import("./metal-prices.server")
+      .then((m) => m.getMetalSnapshots())
+      .catch((e: unknown) => {
+        console.error("metal snapshots failed", e);
+        return {} as Record<string, never>;
+      });
     let usd: Record<string, { usd: number; change24h: number | null }> = {};
     try {
       usd = await okxPrices();
@@ -178,22 +136,19 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
         change24h: q.change24h,
       };
     }
-    // Vàng (mỗi chỉ, SJC) và bạc (mỗi lượng, Ancarat): định giá theo giá mua
-    // vào; giá bán ra giữ ở askVnd để điền sẵn khi ghi lần mua.
-    const [gold, silver] = await Promise.all([goldPromise, silverPromise]);
-    for (const [sym, m] of [
-      [GOLD_SYMBOL, gold],
-      [SILVER_SYMBOL, silver],
-    ] as const) {
-      if (!m || !usdVnd) continue;
-      const usdBid = m.bidVnd / usdVnd;
+    // Vàng (mỗi chỉ, SJC) và bạc (mỗi lượng, Ancarat): luôn tính bằng VND,
+    // định giá theo giá mua vào; giá bán ra ở askVnd để điền khi ghi lần mua.
+    const metals = await metalsPromise;
+    for (const [sym, m] of Object.entries(metals)) {
+      const usdBid = usdVnd ? m.bidVnd / usdVnd : 0;
       prices[sym] = {
         usd: usdBid,
         vnd: m.bidVnd,
-        krw: usdKrw ? usdBid * usdKrw : 0,
+        krw: usdKrw && usdBid ? usdBid * usdKrw : 0,
         change24h: m.change24h,
         askVnd: m.askVnd,
         source: m.source,
+        updatedAt: m.slotAt,
       };
     }
     const error =

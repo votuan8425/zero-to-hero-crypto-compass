@@ -74,6 +74,8 @@ function normalizeTx(r: Tables<"transactions">): Tx {
     quantity: Number(r.quantity),
     price_usd: Number(r.price_usd),
     fee_usd: Number(r.fee_usd ?? 0),
+    price_vnd: r.price_vnd == null ? null : Number(r.price_vnd),
+    fee_vnd: r.fee_vnd == null ? null : Number(r.fee_vnd),
     tx_date: r.tx_date,
     note: r.note ?? null,
     updated_at: r.updated_at,

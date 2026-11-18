@@ -20,7 +20,7 @@ import {
   type CandlePoint,
   type ChartRange,
 } from "@/lib/prices.functions";
-import { formatNumber, type Currency } from "@/lib/format";
+import { formatDateTime, formatMoney, formatNumber, type Currency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const RANGES: { value: ChartRange; label: string }[] = [
@@ -303,6 +303,11 @@ export function PriceChartDialog({
   // Vàng/bạc: biểu đồ là giá thế giới theo ounce (chỉ để xem xu hướng);
   // giá trong nước SJC / Ancarat hiện ở khung riêng phía trên.
   const metalUnit = coin?.unit;
+  // Vàng/bạc luôn hiển thị bằng VND, kể cả biểu đồ giá thế giới.
+  const show = (usd: number | null, compact = false) =>
+    metalUnit
+      ? formatMoney(usd != null && usdVnd ? usd * usdVnd : null, "VND", { compact })
+      : money(usd, compact);
   const unit = metalUnit ? "thế giới / ounce" : "";
   const canPan = points.length > visible;
   const canZoomIn = visible > MIN_VISIBLE;
@@ -378,7 +383,7 @@ export function PriceChartDialog({
           </DialogTitle>
           <DialogDescription>
             {metalUnit
-              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}. Biểu đồ bên dưới là giá ${coin?.name.toLowerCase()} thế giới (mỗi ounce), chỉ để xem xu hướng.`
+              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}, cập nhật lúc 6:00 và 22:00 mỗi ngày${quote?.updatedAt ? ` (lần gần nhất ${formatDateTime(quote.updatedAt)})` : ""}. Biểu đồ bên dưới là giá ${coin?.name.toLowerCase()} thế giới (mỗi ounce), chỉ để xem xu hướng.`
               : "Biểu đồ giá từ OKX."}
           </DialogDescription>
         </DialogHeader>
@@ -388,13 +393,13 @@ export function PriceChartDialog({
             <div className="rounded-lg bg-surface-raised px-4 py-3">
               <div className="text-xs text-muted-foreground">Mua vào / {metalUnit}</div>
               <div className="num mt-0.5 font-semibold">
-                {quote ? money(quote.usd) : "Chưa có giá"}
+                {quote && quote.vnd > 0 ? formatMoney(quote.vnd, "VND") : "Chưa có giá"}
               </div>
             </div>
             <div className="rounded-lg bg-surface-raised px-4 py-3">
               <div className="text-xs text-muted-foreground">Bán ra / {metalUnit}</div>
               <div className="num mt-0.5 font-semibold">
-                {quote?.askVnd != null && usdVnd ? money(quote.askVnd / usdVnd) : "Chưa có giá"}
+                {quote?.askVnd != null ? formatMoney(quote.askVnd, "VND") : "Chưa có giá"}
               </div>
             </div>
           </div>
@@ -403,7 +408,7 @@ export function PriceChartDialog({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="num text-2xl font-bold tracking-tight">
-              {lastPrice != null ? money(lastPrice) : "—"}
+              {lastPrice != null ? show(lastPrice) : "—"}
               {unit && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{unit}</span>}
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
@@ -540,7 +545,7 @@ export function PriceChartDialog({
                     fontSize="11"
                     fill="var(--muted-foreground)"
                   >
-                    {money(t.value, currency !== "USDT")}
+                    {show(t.value, metalUnit ? true : currency !== "USDT")}
                   </text>
                 </g>
               ))}
@@ -553,7 +558,7 @@ export function PriceChartDialog({
                   fontWeight="700"
                   fill={up ? "var(--gain)" : "var(--loss)"}
                 >
-                  {money(chart.lastClose, currency !== "USDT")}
+                  {show(chart.lastClose, metalUnit ? true : currency !== "USDT")}
                 </text>
               )}
               <g ref={candleGroupRef} clipPath={`url(#${clipPlotId})`}>
@@ -667,7 +672,7 @@ export function PriceChartDialog({
                       fontWeight="700"
                       fill="var(--popover-foreground)"
                     >
-                      {money(chart.sel.close, currency !== "USDT")}
+                      {show(chart.sel.close, metalUnit ? true : currency !== "USDT")}
                     </text>
                     <text
                       x={chart.sel.boxX + 10}
@@ -696,13 +701,13 @@ export function PriceChartDialog({
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Cao nhất
             </div>
-            <div className="num mt-0.5 text-sm font-semibold">{high != null ? money(high) : "—"}</div>
+            <div className="num mt-0.5 text-sm font-semibold">{high != null ? show(high) : "—"}</div>
           </div>
           <div className="rounded-lg bg-surface-raised px-2 py-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Thấp nhất
             </div>
-            <div className="num mt-0.5 text-sm font-semibold">{low != null ? money(low) : "—"}</div>
+            <div className="num mt-0.5 text-sm font-semibold">{low != null ? show(low) : "—"}</div>
           </div>
           <div className="rounded-lg bg-surface-raised px-2 py-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

@@ -20,6 +20,7 @@ import { Route as AuthenticatedThamKhaoIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedThamKhaoIdRouteImport } from './routes/_authenticated/tham-khao.$id'
 import { Route as AuthenticatedThamKhaoMoiRouteImport } from './routes/_authenticated/tham-khao.moi'
 import { Route as AuthenticatedThamKhaoSoSanhRouteImport } from './routes/_authenticated/tham-khao.so-sanh'
+import { Route as ApiPublicJobsMetalPricesRouteImport } from './routes/api/public/jobs/metal-prices'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,6 +79,12 @@ const AuthenticatedThamKhaoSoSanhRoute =
     path: '/tham-khao/so-sanh',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicJobsMetalPricesRoute =
+  ApiPublicJobsMetalPricesRouteImport.update({
+    id: '/api/public/jobs/metal-prices',
+    path: '/api/public/jobs/metal-prices',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
   '/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
+  '/api/public/jobs/metal-prices': typeof ApiPublicJobsMetalPricesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -102,6 +110,7 @@ export interface FileRoutesByTo {
   '/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
   '/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/tham-khao': typeof AuthenticatedThamKhaoIndexRoute
+  '/api/public/jobs/metal-prices': typeof ApiPublicJobsMetalPricesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +125,7 @@ export interface FileRoutesById {
   '/_authenticated/tham-khao/moi': typeof AuthenticatedThamKhaoMoiRoute
   '/_authenticated/tham-khao/so-sanh': typeof AuthenticatedThamKhaoSoSanhRoute
   '/_authenticated/tham-khao/': typeof AuthenticatedThamKhaoIndexRoute
+  '/api/public/jobs/metal-prices': typeof ApiPublicJobsMetalPricesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/tham-khao/moi'
     | '/tham-khao/so-sanh'
     | '/tham-khao/'
+    | '/api/public/jobs/metal-prices'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/tham-khao/moi'
     | '/tham-khao/so-sanh'
     | '/tham-khao'
+    | '/api/public/jobs/metal-prices'
   id:
     | '__root__'
     | '/'
@@ -155,6 +167,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tham-khao/moi'
     | '/_authenticated/tham-khao/so-sanh'
     | '/_authenticated/tham-khao/'
+    | '/api/public/jobs/metal-prices'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -162,6 +175,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicJobsMetalPricesRoute: typeof ApiPublicJobsMetalPricesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -243,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedThamKhaoSoSanhRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/jobs/metal-prices': {
+      id: '/api/public/jobs/metal-prices'
+      path: '/api/public/jobs/metal-prices'
+      fullPath: '/api/public/jobs/metal-prices'
+      preLoaderRoute: typeof ApiPublicJobsMetalPricesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -274,6 +295,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicJobsMetalPricesRoute: ApiPublicJobsMetalPricesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,6 +6,8 @@ export interface CoinInfo {
   unit?: "chỉ" | "lượng";
   /** Nguồn giá trong nước của kim loại quý (hiển thị thay cho mã). */
   priceSource?: string;
+  /** Chữ hiện trong biểu tượng khi không có ảnh logo (VD: bạc → "Ag"). */
+  logoText?: string;
 }
 
 /** Popular coins supported for accumulation, with CoinGecko ids for live prices. */
@@ -13,7 +15,7 @@ export const COINS: CoinInfo[] = [
   { symbol: "BTC", name: "Bitcoin", geckoId: "bitcoin" },
   { symbol: "ETH", name: "Ethereum", geckoId: "ethereum" },
   { symbol: "PAXG", name: "Vàng", geckoId: "pax-gold", unit: "chỉ", priceSource: "SJC" },
-  { symbol: "KAG", name: "Bạc", geckoId: "kinesis-silver", unit: "lượng", priceSource: "Ancarat" },
+  { symbol: "KAG", name: "Bạc", geckoId: "kinesis-silver", unit: "lượng", priceSource: "Ancarat", logoText: "Ag" },
   { symbol: "SOL", name: "Solana", geckoId: "solana" },
   { symbol: "BNB", name: "BNB", geckoId: "binancecoin" },
   { symbol: "XRP", name: "XRP", geckoId: "ripple" },

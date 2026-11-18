@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { coinLogoUrl, displaySymbol } from "@/lib/coins";
+import { coinLogoUrl, displaySymbol, getCoin } from "@/lib/coins";
 import { cn } from "@/lib/utils";
 
 export function CoinLogo({
@@ -13,7 +13,7 @@ export function CoinLogo({
 }) {
   const [failed, setFailed] = useState(false);
   const url = coinLogoUrl(symbol);
-  const label = displaySymbol(symbol);
+  const label = getCoin(symbol)?.logoText ?? displaySymbol(symbol);
   if (!url || failed) {
     return (
       <span

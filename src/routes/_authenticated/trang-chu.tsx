@@ -213,7 +213,25 @@ function HomePage() {
               Tài sản đang nắm giữ
             </h2>
             <ul className="mt-3 divide-y divide-border">
-              {holdings.map((h) => (
+              {holdings.map((h) => {
+                const unit = getCoin(h.symbol)?.unit;
+                // Vàng/bạc luôn hiển thị bằng VND (vốn VND chính xác nếu có).
+                const toVnd = (usd: number | null) => (usd != null && usdVnd ? usd * usdVnd : null);
+                const fmt = (v: number | null, compact = false) =>
+                  formatMoney(v, "VND", { compact });
+                const avg = unit ? fmt(h.avgCostVnd ?? toVnd(h.avgCostUsd)) : money(h.avgCostUsd);
+                const cur = unit
+                  ? fmt(prices.data?.prices[h.symbol]?.vnd ?? null)
+                  : h.priceUsd != null
+                    ? money(h.priceUsd)
+                    : null;
+                const value = unit ? fmt(h.valueVnd ?? toVnd(h.valueUsd)) : money(h.valueUsd ?? null);
+                const pnl = unit ? (h.pnlVnd ?? toVnd(h.pnlUsd)) : h.pnlUsd;
+                const pnlText =
+                  pnl == null
+                    ? "Chưa có giá"
+                    : `${pnl >= 0 ? "+" : ""}${unit ? fmt(pnl, true) : money(pnl, true)} (${formatPercent(h.pnlPct, 1, true)})`;
+                return (
                 <li key={h.symbol} className="flex items-center gap-3 px-5 py-3.5">
                   <CoinLogo symbol={h.symbol} size={36} />
                   <div className="min-w-0 flex-1">
@@ -223,13 +241,11 @@ function HomePage() {
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
-                        Avg {money(h.avgCostUsd)}
-                        {getCoin(h.symbol)?.unit ? ` / ${getCoin(h.symbol)?.unit}` : ""}
+                        Avg {avg}
+                        {unit ? ` / ${unit}` : ""}
                       </span>
-                      {h.priceUsd != null && (
-                        <span className="num text-xs text-muted-foreground">
-                          Hiện tại {money(h.priceUsd)}
-                        </span>
+                      {cur != null && cur !== "—" && (
+                        <span className="num text-xs text-muted-foreground">Hiện tại {cur}</span>
                       )}
                     </div>
                     <div className="num mt-1 text-xs text-muted-foreground">
@@ -237,15 +253,14 @@ function HomePage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="num font-semibold">{money(h.valueUsd ?? null)}</div>
-                    <PnlText value={h.pnlUsd} className="text-xs">
-                      {h.pnlUsd != null
-                        ? `${h.pnlUsd >= 0 ? "+" : ""}${money(h.pnlUsd, true)} (${formatPercent(h.pnlPct, 1, true)})`
-                        : "Chưa có giá"}
+                    <div className="num font-semibold">{value}</div>
+                    <PnlText value={pnl} className="text-xs">
+                      {pnlText}
                     </PnlText>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         </div>
@@ -330,12 +345,26 @@ function MarketPrices({
                         {c.unit ? ` · 1 ${c.unit}` : ""}
                       </span>
                     </div>
-                    <div className="num text-xs text-muted-foreground">
-                      {!q
-                        ? "Chưa có giá"
-                        : q.askVnd != null
-                          ? `Mua ${money(q.usd)} · Bán ${money(usdVnd ? q.askVnd / usdVnd : null)}`
-                          : money(q.usd)}
+                    <div className="num flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                      {!q ? (
+                        "Chưa có giá"
+                      ) : q.askVnd != null ? (
+                        <>
+                          <span className="whitespace-nowrap">
+                            Mua {formatMoney(q.vnd, "VND")}
+                          </span>
+                          <span className="whitespace-nowrap">
+                            Bán {formatMoney(q.askVnd, "VND")}
+                          </span>
+                          {q.updatedAt && (
+                            <span className="whitespace-nowrap">
+                              Cập nhật {formatDateTime(q.updatedAt)}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        money(q.usd)
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
