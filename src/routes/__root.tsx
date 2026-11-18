@@ -93,6 +93,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#0b0b0b" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Zero to Hero" },
       { title: "ZERO TO HERO — Tích sản tiền mã hoá" },
       {
         name: "description",
@@ -114,6 +118,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -168,6 +174,14 @@ function RootComponent() {
     });
     return () => data.subscription.unsubscribe();
   }, [router, queryClient]);
+
+  // Đăng ký service worker 1 lần lúc mở app: cần cho Web Push và để trình
+  // duyệt cho cài app về màn hình chính (PWA). Không hỏi quyền ở đây.
+  useEffect(() => {
+    void import("@/lib/push").then(({ registerServiceWorker }) =>
+      registerServiceWorker(),
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  Bell,
+  BellRing,
   CheckCircle2,
   CloudUpload,
   Download,
@@ -33,6 +35,13 @@ import {
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/app-shell";
 import { useSync } from "@/components/app/sync-provider";
+import {
+  getPushPermission,
+  isPushSubscribed,
+  isPushSupported,
+  subscribePush,
+  unsubscribePush,
+} from "@/lib/push";
 import { useProfile, useReferences, useTransactions } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { profileKey, refsKey, txKey, updateProfile } from "@/lib/data";
@@ -228,6 +237,8 @@ function PersonalPage() {
 
         <ThemeSection />
 
+        <PushSection />
+
         <Section
           icon={sync.online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
           title="Đồng bộ đám mây"
@@ -336,6 +347,107 @@ function ThemeSection() {
           </div>
         </div>
       </div>
+    </Section>
+  );
+}
+
+/** Thông báo đẩy: bật/tắt nhận báo khi admin mình theo dõi cập nhật danh mục. */
+function PushSection() {
+  const [supported] = useState(() => isPushSupported());
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
+    () => getPushPermission(),
+  );
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void isPushSubscribed().then((v) => {
+      if (!cancelled) setEnabled(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (enabled) {
+        await unsubscribePush();
+        setEnabled(false);
+        toast.success("Đã tắt thông báo đẩy trên trình duyệt này.");
+      } else {
+        const result = await subscribePush();
+        setPermission(getPushPermission());
+        if (result === "subscribed" || result === "already") {
+          setEnabled(true);
+          toast.success("Đã bật thông báo — admin cập nhật là bạn nhận được ngay.");
+        } else if (result === "denied") {
+          toast.error(
+            "Bạn đã chặn quyền thông báo. Mở cài đặt trình duyệt của trang này để bật lại.",
+          );
+        } else if (result === "no-key") {
+          toast.error("Máy chủ chưa cấu hình nhận thông báo đẩy.");
+        } else if (result === "unsupported") {
+          toast.error(
+            "Trình duyệt này chưa hỗ trợ thông báo đẩy (iPhone cần Safari 16.4+ và app đã thêm vào Màn hình chính).",
+          );
+        } else {
+          toast.error("Không bật được thông báo. Vui lòng thử lại.");
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      icon={enabled ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+      title="Thông báo"
+      description="Nhận báo khi admin bạn theo dõi cập nhật danh mục hoặc lời nhắn — cả khi không mở app."
+    >
+      {!supported ? (
+        <p className="text-sm text-muted-foreground">
+          Trình duyệt này chưa hỗ trợ thông báo đẩy. Thử Chrome trên Android/máy tính,
+          hoặc Safari 16.4+ trên iPhone sau khi thêm app vào Màn hình chính.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label={enabled ? "Tắt thông báo đẩy" : "Bật thông báo đẩy"}
+            disabled={busy}
+            onClick={() => void toggle()}
+            className={cn(
+              "relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60",
+              enabled ? "bg-primary" : "bg-surface-raised",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all",
+                enabled ? "left-[22px]" : "left-0.5",
+              )}
+            />
+          </button>
+          <div>
+            <div className="text-sm font-medium">
+              {enabled ? "Đang bật" : "Đang tắt"}
+              {permission === "denied" ? " — trình duyệt đang chặn" : ""}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {enabled
+                ? "Admin cập nhật danh mục là trình duyệt này báo ngay."
+                : "Bật để nhận báo ngay cả khi không mở app. Tắt bất cứ lúc nào."}
+            </div>
+          </div>
+        </div>
+      )}
     </Section>
   );
 }

@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { BookMarked, CloudOff, Home, Layers, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { BrandMark } from "./brand";
+import { NotificationBell } from "./notification-bell";
 import { SyncBadge } from "./sync-badge";
 import { useSync } from "./sync-provider";
 
@@ -33,7 +34,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <NotificationBell />
             <SyncBadge />
           </div>
         </div>

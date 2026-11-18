@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
+import { PushOptInCard, usePushSoftAsk } from "@/components/app/push-opt-in-card";
 import { DonutChart, CHART_COLORS } from "@/components/app/donut-chart";
 import { PnlText } from "@/components/app/stat";
 import { usePortfolio, useReferences } from "@/hooks/use-app-data";
@@ -363,6 +364,7 @@ function ReferencesPage() {
   });
   const followMap = followQuery.data ?? {};
   const [followBusy, setFollowBusy] = useState<string | null>(null);
+  const pushAsk = usePushSoftAsk();
 
   async function sendFollowRequest(investorId: string) {
     if (followBusy) return;
@@ -371,6 +373,8 @@ function ReferencesPage() {
       await requestFollow(investorId);
       await qc.invalidateQueries({ queryKey: ["my-investor-follows"] });
       toast.success("Đã gửi yêu cầu theo dõi — chờ admin duyệt.");
+      // Đúng lúc hỏi mềm bật thông báo đẩy: user vừa follow xong nên có lý do.
+      pushAsk.maybeShow();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Không gửi được yêu cầu. Vui lòng thử lại.");
     } finally {
@@ -553,6 +557,8 @@ function ReferencesPage() {
             : "Bạn chưa đăng portfolio. Bấm “Đăng portfolio” để công bố danh mục — người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
           : "Biểu đồ danh mục chỉ hiện sau khi admin duyệt yêu cầu theo dõi của bạn. Gửi yêu cầu trên thẻ nhà đầu tư rồi chờ duyệt."}
       </div>
+
+      {pushAsk.visible && <PushOptInCard onClose={() => pushAsk.setVisible(false)} />}
 
       {/* Mỗi nhà đầu tư MỘT thẻ duy nhất (đã gộp xem trước + danh mục đầy đủ).
           Chart chỉ hiện khi là chính admin đó hoặc đã được duyệt theo dõi. */}
