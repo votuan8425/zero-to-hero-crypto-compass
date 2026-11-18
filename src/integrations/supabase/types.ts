@@ -18,6 +18,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          message: string | null
+          message_updated_at: string | null
           pnl_pct: number | null
           slices: Json
           started_at: string | null
@@ -27,6 +29,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          message?: string | null
+          message_updated_at?: string | null
           pnl_pct?: number | null
           slices?: Json
           started_at?: string | null
@@ -36,11 +40,43 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          message?: string | null
+          message_updated_at?: string | null
           pnl_pct?: number | null
           slices?: Json
           started_at?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      investor_follows: {
+        Row: {
+          created_at: string
+          follower_id: string
+          follower_name: string | null
+          id: string
+          investor_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          follower_id: string
+          follower_name?: string | null
+          id?: string
+          investor_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          follower_id?: string
+          follower_name?: string | null
+          id?: string
+          investor_id?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
