@@ -109,26 +109,6 @@ function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyQuery.data, period, txs.data, totals.valueUsd]);
 
-  // PNL của 3 kỳ chính (1 ngày / 1 tháng / 1 năm) để xem nhanh cạnh chart —
-  // tính từ cùng chuỗi nến đã nạp, chốt điểm cuối bằng tổng giá trị live
-  // như kỳ đang chọn. Bấm vào ô nào thì chuyển sang kỳ đó.
-  const periodPnls = useMemo(() => {
-    const data = historyQuery.data;
-    if (!data) return null;
-    const toMs = Date.now();
-    const calc = (p: HistoryPeriod) => {
-      const fromMs = toMs - historyPeriodDays(p) * 86_400_000;
-      const series = p === "1D" ? data.hourly : p === "1Y" ? data.weekly : data.daily;
-      return withLiveEndpoint(
-        computePortfolioHistory(txs.data ?? [], series, fromMs, toMs),
-        toMs,
-        totals.valueUsd,
-      );
-    };
-    return { "1D": calc("1D"), "1M": calc("1M"), "1Y": calc("1Y") };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyQuery.data, txs.data, totals.valueUsd]);
-
   const showLegacy = (legacy.data?.length ?? 0) > 0 && !profile?.local_migrated_at;
 
   return (
@@ -237,44 +217,6 @@ function HomePage() {
             </div>
           )}
         </div>
-        {holdings.length > 0 && (
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {(["1D", "1M", "1Y"] as const).map((p) => {
-              const h = periodPnls?.[p] ?? null;
-              const pnl = h != null && h.points.length > 0 ? h.pnl : null;
-              const pct = h != null && h.points.length > 0 ? h.pnlPct : null;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => {
-                    setPeriod(p);
-                    setHovered(null);
-                  }}
-                  className={cn(
-                    "rounded-xl border px-3 py-2 text-left",
-                    period === p
-                      ? "border-primary/60 bg-primary/10"
-                      : "border-border bg-muted/40",
-                  )}
-                >
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {historyPeriodLabel(p)}
-                  </div>
-                  <PnlText
-                    value={pnl}
-                    className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold"
-                  >
-                    {pnl != null ? `${pnl >= 0 ? "+" : ""}${money(pnl)}` : "—"}
-                  </PnlText>
-                  <PnlText value={pnl} className="block text-[11px] font-medium">
-                    {pct != null ? `(${formatPercent(pct, 2, true)})` : "—"}
-                  </PnlText>
-                </button>
-              );
-            })}
-          </div>
-        )}
         {holdings.length > 0 && (
           <div className="mt-1 flex justify-center">
             <ToggleGroup

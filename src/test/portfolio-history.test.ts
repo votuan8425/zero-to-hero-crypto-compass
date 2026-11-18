@@ -114,49 +114,6 @@ describe("lịch sử giá trị danh mục", () => {
     expect(h.pnl).toBe(30);
   });
 
-  it("PNL 3 kỳ 1D/1M/1Y: mỗi kỳ dùng đúng chuỗi nến của nó", () => {
-    const WEEK = 7 * DAY;
-    const buy = [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-01", price_usd: 100 })];
-    // 1D: nến giờ, mua từ trước kỳ nên PNL là biến động giá trong ngày.
-    const h1d = computePortfolioHistory(
-      buy,
-      {
-        BTC: [
-          { t: t0 + 2 * DAY, c: 120 },
-          { t: t0 + 2 * DAY + 12 * HOUR, c: 125 },
-          { t: t0 + 3 * DAY, c: 130 },
-        ],
-      },
-      t0 + 2 * DAY,
-      t0 + 3 * DAY,
-    );
-    expect(h1d.pnl).toBe(10);
-    // 1M: nến ngày, cùng lần mua đó.
-    const h1m = computePortfolioHistory(
-      buy,
-      { BTC: daily([100, 110, 120, 130]) },
-      t0,
-      t0 + 3 * DAY,
-    );
-    expect(h1m.pnl).toBe(30);
-    // 1Y: nến tuần, lần mua nằm trong kỳ nên tiền mua không tính là lãi.
-    const h1y = computePortfolioHistory(
-      buy,
-      {
-        BTC: [
-          { t: t0 - 2 * WEEK, c: 90 },
-          { t: t0 - WEEK, c: 100 },
-          { t: t0, c: 120 },
-          { t: t0 + 3 * DAY, c: 130 },
-        ],
-      },
-      t0 - 2 * WEEK,
-      t0 + 3 * DAY,
-    );
-    expect(h1y.pnl).toBe(30);
-    expect(h1y.deposits).toBe(100);
-  });
-
   it("đã mua từ trước kỳ thì đường bắt đầu ở đầu kỳ bằng giá trị lúc đó", () => {
     const h = computePortfolioHistory(
       [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-10-01", price_usd: 100 })],
