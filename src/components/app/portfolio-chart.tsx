@@ -21,8 +21,34 @@ const PAD_X = 4;
 const PAD_TOP = 18;
 const PAD_BOTTOM = 12;
 /** Khoảng cách lưới chấm kiểu OKX (px trong khung viewBox). */
-const DOT_STEP = 16;
-const DOT_R = 1.8;
+const DOT_STEP = 12;
+const DOT_R = 1.5;
+
+const fmt = (v: number) => Number(v.toFixed(1));
+
+/**
+ * Đường cong mềm qua các điểm (Catmull-Rom → Bezier): đường đi qua đúng
+ * từng điểm nhưng bo tròn ở khớp nối, không gãy khúc như nối thẳng —
+ * nhìn mềm như chart OKX thay vì thô và cứng.
+ */
+export function smoothLinePath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return "";
+  const p = pts.map((q) => ({ x: fmt(q.x), y: fmt(q.y) }));
+  if (p.length === 2) return `M${p[0]!.x},${p[0]!.y} L${p[1]!.x},${p[1]!.y}`;
+  let d = `M${p[0]!.x},${p[0]!.y}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[Math.max(0, i - 1)]!;
+    const p1 = p[i]!;
+    const p2 = p[i + 1]!;
+    const p3 = p[Math.min(p.length - 1, i + 2)]!;
+    const c1x = fmt(p1.x + (p2.x - p0.x) / 6);
+    const c1y = fmt(p1.y + (p2.y - p0.y) / 6);
+    const c2x = fmt(p2.x - (p3.x - p1.x) / 6);
+    const c2y = fmt(p2.y - (p3.y - p1.y) / 6);
+    d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
 
 export function PortfolioChart({
   points,
@@ -59,9 +85,7 @@ export function PortfolioChart({
     const line =
       points.length === 1
         ? `M${PAD_X},${y(points[0]!.value).toFixed(1)} L${W - PAD_X},${y(points[0]!.value).toFixed(1)}`
-        : points
-            .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`)
-            .join(" ");
+        : smoothLinePath(points.map((p, i) => ({ x: x(i), y: y(p.value) })));
     const area =
       points.length === 1
         ? ""
@@ -118,8 +142,8 @@ export function PortfolioChart({
               cx={DOT_STEP / 2}
               cy={DOT_STEP / 2}
               r={DOT_R}
-              fill="var(--muted-foreground)"
-              fillOpacity="0.55"
+              fill="currentColor"
+              fillOpacity="0.5"
             />
           </pattern>
         </defs>
@@ -130,10 +154,10 @@ export function PortfolioChart({
               d={geom.line}
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.5"
+              strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
-              style={{ filter: "drop-shadow(0 0 5px currentColor)" }}
+              style={{ filter: "drop-shadow(0 0 7px currentColor)" }}
             />
             {hovered && hoverIdx != null && (
               <g>
