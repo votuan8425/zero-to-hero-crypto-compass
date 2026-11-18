@@ -17,7 +17,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { isNetworkError, profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { fetchPublishedAllocations, publishedAllocationsKey } from "@/lib/admin-allocation";
 import { pricesQuery } from "@/hooks/use-app-data";
+import {
+  portfolioHistoryQuery,
+  type HistorySeries,
+} from "@/hooks/use-portfolio-history";
 import { computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
+import {
+  computePortfolioHistory,
+  historyPeriodDays,
+  withLiveEndpoint,
+} from "@/lib/portfolio-history";
 import type { PricesResult } from "@/lib/prices.functions";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
@@ -165,6 +174,9 @@ function RootComponent() {
   // Riêng TỔNG GIÁ TRỊ ƯỚC TÍNH: chỉ cho vào app khi đã tính được từ data giá
   // thật vừa nạp (token BTC/ETH… từ OKX/CoinGecko + vàng/bạc SJC/Ancarat);
   // chưa tính được thì ở ngoài màn hình chờ xoay xoay, tải lại giá và chờ thêm.
+  // Rồi CHART và PNL: cũng chỉ cho vào khi chart đã hiện được (có điểm vẽ,
+  // tức có màu xanh/đỏ theo xu hướng) và PNL lãi/lỗ kỳ mặc định (1 tháng)
+  // đã tính được từ nến thật — chưa đủ thì nạp nốt nến và chờ thêm.
   // Chờ tối đa 15 giây để không kẹt mãi khi mạng yếu (quá 15s thì vẫn vào app
   // với dữ liệu đã có / đã lưu, phần còn thiếu tự tải nốt trong nền). Chỉ chạy
   // khi tải lại trang / mở app (component này chỉ mount một lần), không hiện
@@ -255,6 +267,53 @@ function RootComponent() {
                 type: "all",
               });
               if (cancelled || remaining() <= 0) break;
+              await sleep(Math.min(1000, remaining()));
+            }
+          }
+          // Chart và PNL kỳ mặc định (1 tháng): chỉ vào app khi chart đã
+          // hiện được (có điểm vẽ → có màu xanh/đỏ theo xu hướng) và PNL
+          // lãi/lỗ đã tính được từ nến thật. Chưa có giao dịch nào thì
+          // không có chart/PNL để chờ, vào luôn. Nạp nến bằng cùng query
+          // trang chủ dùng (đã có trong cache thì prefetch không gọi lại);
+          // nến lỗi thì chờ 1s rồi nạp lại trong thời gian còn lại.
+          if (!cancelled && remaining() > 0) {
+            setBootStatus("Đang tải biểu đồ và tính lãi/lỗ…");
+            for (;;) {
+              const txs =
+                queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
+              const pricesData =
+                queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
+              const holdings = computeHoldings(txs, pricesData?.prices ?? {});
+              const value = computeTotals(holdings).valueUsd;
+              if (holdings.length === 0 || cancelled || remaining() <= 0) break;
+              if (value == null) {
+                await queryClient.refetchQueries({
+                  queryKey: pricesQuery.queryKey,
+                  type: "all",
+                });
+                if (cancelled || remaining() <= 0) break;
+                await sleep(Math.min(1000, remaining()));
+                continue;
+              }
+              const options = portfolioHistoryQuery(
+                holdings.map((h) => h.symbol),
+                pricesData?.prices,
+              );
+              await queryClient.prefetchQuery(options).catch(() => undefined);
+              const data = queryClient.getQueryData<HistorySeries>(options.queryKey);
+              const ready =
+                data != null &&
+                (() => {
+                  const toMs = Date.now();
+                  const fromMs = toMs - historyPeriodDays("1M") * 86_400_000;
+                  const h = withLiveEndpoint(
+                    computePortfolioHistory(txs, data.daily, fromMs, toMs),
+                    toMs,
+                    value,
+                  );
+                  return h.points.length > 0 && h.pnl != null;
+                })();
+              if (ready || cancelled || remaining() <= 0) break;
               await sleep(Math.min(1000, remaining()));
             }
           }

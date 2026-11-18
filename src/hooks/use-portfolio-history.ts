@@ -52,10 +52,13 @@ function convertMetal(
   return rescaleSeriesToCurrent(perUnit, prices?.[symbol]?.usd ?? null);
 }
 
-export function usePortfolioHistory(symbols: string[], prices: PriceMap | undefined) {
+/** Query nến lịch sử (cùng key + queryFn với hook bên dưới) để màn hình chờ
+ *  (boot) prefetch được trước khi cho vào app — chart và PNL kỳ 1M phải
+ *  tính được từ nến thật thì mới vào trang chủ. */
+export function portfolioHistoryQuery(symbols: string[], prices: PriceMap | undefined) {
   const key = [...new Set(symbols)].sort().join(",");
-  return useQuery({
-    queryKey: ["portfolio-history", key],
+  return {
+    queryKey: ["portfolio-history", key] as const,
     queryFn: async (): Promise<HistorySeries> => {
       const syms = [...new Set(symbols)];
       const hourly: HistorySeries["hourly"] = {};
@@ -75,7 +78,13 @@ export function usePortfolioHistory(symbols: string[], prices: PriceMap | undefi
       );
       return { hourly, daily, weekly };
     },
-    enabled: symbols.length > 0,
     staleTime: 5 * 60_000,
+  };
+}
+
+export function usePortfolioHistory(symbols: string[], prices: PriceMap | undefined) {
+  return useQuery({
+    ...portfolioHistoryQuery(symbols, prices),
+    enabled: symbols.length > 0,
   });
 }
