@@ -104,7 +104,7 @@ const SEGMENT_GROUP = "rounded-full bg-muted p-1 gap-0";
 const SEGMENT_ITEM =
   "h-8 rounded-full px-3 text-xs font-medium hover:bg-background/70 hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground";
 
-/** Popup biểu đồ giá theo ngày / tháng / năm — kiểu OKX, dùng chung Dialog với "Thêm lần mua". */
+/** Popup biểu đồ giá theo ngày / tháng / năm — kiểu OKX, dùng chung Dialog với "Thêm lần tích sản". */
 export function PriceChartDialog({
   open,
   onOpenChange,

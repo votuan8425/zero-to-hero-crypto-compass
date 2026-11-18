@@ -149,7 +149,7 @@ function AccumulatePage() {
               setOpen(true);
             }}
           >
-            <Plus /> Thêm lần mua
+            <Plus /> Tích sản
           </Button>
         }
       />
@@ -360,7 +360,7 @@ function AccumulatePage() {
             <EmptyState
               icon={<Plus className="h-6 w-6" />}
               title="Chưa có giao dịch"
-              description="Bấm “Thêm lần mua” để ghi lại lần tích sản đầu tiên."
+              description="Bấm “Tích sản” để ghi lại lần tích sản đầu tiên."
             />
           </div>
         ) : (

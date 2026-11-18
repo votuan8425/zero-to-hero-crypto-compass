@@ -9,11 +9,9 @@ import {
   Coins,
   Flame,
   Layers,
-  Plus,
   Star,
   Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EmptyState, PageHeader } from "@/components/app/app-shell";
@@ -113,13 +111,6 @@ function HomePage() {
       <PageHeader
         title={`Xin chào${profile?.display_name ? `, ${profile.display_name}` : ""}`}
         subtitle={formatDate(new Date(), "long")}
-        action={
-          <Button asChild variant="hero">
-            <Link to="/tich-san" search={{ add: true }}>
-              <Plus /> Tích sản
-            </Link>
-          </Button>
-        }
       />
 
       {showLegacy && (
@@ -302,14 +293,7 @@ function HomePage() {
           <EmptyState
             icon={<Wallet className="h-6 w-6" />}
             title="Bạn chưa có giao dịch tích sản nào"
-            description="Ghi lại lần mua đầu tiên để bắt đầu theo dõi tổng tài sản, lãi/lỗ và chuỗi tích sản."
-            action={
-              <Button asChild variant="hero">
-                <Link to="/tich-san" search={{ add: true }}>
-                  <Plus /> Thêm lần mua đầu tiên
-                </Link>
-              </Button>
-            }
+            description="Mở tab Tích sản để ghi lại lần mua đầu tiên và bắt đầu theo dõi tổng tài sản, lãi/lỗ và chuỗi tích sản."
           />
         </div>
       ) : (
