@@ -97,7 +97,12 @@ function HomePage() {
     if (!historyQuery.data) return null;
     const toMs = Date.now();
     const fromMs = toMs - historyPeriodDays(period) * 86_400_000;
-    const series = period === "1Y" ? historyQuery.data.weekly : historyQuery.data.daily;
+    const series =
+      period === "1D"
+        ? historyQuery.data.hourly
+        : period === "1Y"
+          ? historyQuery.data.weekly
+          : historyQuery.data.daily;
     const h = computePortfolioHistory(txs.data ?? [], series, fromMs, toMs);
     // Chốt điểm cuối bằng tổng giá trị hiện tại để đường chạm đúng số đang hiện.
     return withLiveEndpoint(h, toMs, totals.valueUsd);

@@ -40,23 +40,25 @@ export interface PortfolioHistory {
 
 const DAY_MS = 86_400_000;
 
-export const HISTORY_PERIODS = ["1W", "1M", "3M", "1Y"] as const;
+export const HISTORY_PERIODS = ["1D", "1W", "1M", "3M", "1Y"] as const;
 export type HistoryPeriod = (typeof HISTORY_PERIODS)[number];
 
-/** Số ngày mỗi kỳ xem: 1W→7, 1M→30, 3M→90, 1Y→365. */
+/** Số ngày mỗi kỳ xem: 1D→1, 1W→7, 1M→30, 3M→90, 1Y→365. */
 export function historyPeriodDays(period: HistoryPeriod): number {
-  return period === "1W" ? 7 : period === "1M" ? 30 : period === "3M" ? 90 : 365;
+  return period === "1D" ? 1 : period === "1W" ? 7 : period === "1M" ? 30 : period === "3M" ? 90 : 365;
 }
 
 /** Nhãn tiếng Việt cho dòng PNL theo kỳ ("PNL trong 1 tháng …"). */
 export function historyPeriodLabel(period: HistoryPeriod): string {
-  return period === "1W"
-    ? "1 tuần"
-    : period === "1M"
-      ? "1 tháng"
-      : period === "3M"
-        ? "3 tháng"
-        : "1 năm";
+  return period === "1D"
+    ? "1 ngày"
+    : period === "1W"
+      ? "1 tuần"
+      : period === "1M"
+        ? "1 tháng"
+        : period === "3M"
+          ? "3 tháng"
+          : "1 năm";
 }
 
 /** "2026-11-18" → ms lúc 00:00 UTC ngày đó. */

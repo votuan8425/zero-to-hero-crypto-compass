@@ -10,6 +10,7 @@ import {
 import type { Tx } from "@/lib/portfolio";
 
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
 const t0 = Date.UTC(2026, 10, 1); // 01/11/2026
 
 const tx = (p: Partial<Tx>): Tx => ({
@@ -27,6 +28,10 @@ const tx = (p: Partial<Tx>): Tx => ({
 /** Nến ngày: giá đóng cửa tăng 100 → 110 → 120 … */
 const daily = (closes: number[]) =>
   closes.map((c, i) => ({ t: t0 + i * DAY, c }));
+
+/** Nến giờ bắt đầu từ mốc cho trước. */
+const hourly = (closes: number[], start: number) =>
+  closes.map((c, i) => ({ t: start + i * HOUR, c }));
 
 describe("lịch sử giá trị danh mục", () => {
   it("giá trị = số lượng đã mua tới ngày đó × giá đóng cửa gần nhất", () => {
@@ -82,6 +87,27 @@ describe("lịch sử giá trị danh mục", () => {
       { t: t0 + 2 * DAY, value: 0 },
       { t: t0 + 2 * DAY, value: 120 },
       { t: t0 + 3 * DAY, value: 130 },
+    ]);
+    expect(h.startValue).toBe(0);
+    expect(h.deposits).toBe(100);
+    expect(h.pnl).toBe(30);
+  });
+
+  it("kỳ 1D dùng nến giờ: mua trong ngày thì phẳng ở 0 rồi nhảy lên", () => {
+    const start = t0 - 2 * HOUR; // 22:00 hôm qua, t0 = 00:00 hôm nay
+    const h = computePortfolioHistory(
+      [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-01", price_usd: 100 })],
+      { BTC: hourly([100, 105, 110, 120, 130], start) },
+      start,
+      start + 4 * HOUR,
+    );
+    // Trước 00:00 chưa mua gì nên phẳng ở 0; mua lúc 00:00 thì nhảy lên.
+    expect(h.points).toEqual([
+      { t: start, value: 0 },
+      { t: t0, value: 0 },
+      { t: t0, value: 110 },
+      { t: t0 + HOUR, value: 120 },
+      { t: t0 + 2 * HOUR, value: 130 },
     ]);
     expect(h.startValue).toBe(0);
     expect(h.deposits).toBe(100);
@@ -148,11 +174,13 @@ describe("lịch sử giá trị danh mục", () => {
     ).toEqual([]);
   });
 
-  it("kỳ xem: 1W=7, 1M=30, 3M=90, 1Y=365 ngày", () => {
+  it("kỳ xem: 1D=1, 1W=7, 1M=30, 3M=90, 1Y=365 ngày", () => {
+    expect(historyPeriodDays("1D")).toBe(1);
     expect(historyPeriodDays("1W")).toBe(7);
     expect(historyPeriodDays("1M")).toBe(30);
     expect(historyPeriodDays("3M")).toBe(90);
     expect(historyPeriodDays("1Y")).toBe(365);
+    expect(historyPeriodLabel("1D")).toBe("1 ngày");
     expect(historyPeriodLabel("1M")).toBe("1 tháng");
     expect(historyPeriodLabel("1Y")).toBe("1 năm");
   });

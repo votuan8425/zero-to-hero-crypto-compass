@@ -18,6 +18,8 @@ import type { PriceMap } from "@/lib/portfolio";
 import { getCandles, type ChartRange } from "@/lib/prices.functions";
 
 export interface HistorySeries {
+  /** Nến giờ (3 ngày) theo symbol — dùng cho kỳ 1D. */
+  hourly: Record<string, { t: number; c: number }[]>;
   /** Nến ngày (90 ngày) theo symbol. */
   daily: Record<string, { t: number; c: number }[]>;
   /** Nến tuần (~3 năm) theo symbol. */
@@ -56,16 +58,22 @@ export function usePortfolioHistory(symbols: string[], prices: PriceMap | undefi
     queryKey: ["portfolio-history", key],
     queryFn: async (): Promise<HistorySeries> => {
       const syms = [...new Set(symbols)];
+      const hourly: HistorySeries["hourly"] = {};
       const daily: HistorySeries["daily"] = {};
       const weekly: HistorySeries["weekly"] = {};
       await Promise.all(
         syms.map(async (s) => {
-          const [d, w] = await Promise.all([loadSeries(s, "1M"), loadSeries(s, "1Y")]);
+          const [h, d, w] = await Promise.all([
+            loadSeries(s, "1D"),
+            loadSeries(s, "1M"),
+            loadSeries(s, "1Y"),
+          ]);
+          hourly[s] = convertMetal(s, h, prices);
           daily[s] = convertMetal(s, d, prices);
           weekly[s] = convertMetal(s, w, prices);
         }),
       );
-      return { daily, weekly };
+      return { hourly, daily, weekly };
     },
     enabled: symbols.length > 0,
     staleTime: 5 * 60_000,
