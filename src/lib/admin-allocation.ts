@@ -1,7 +1,8 @@
 /**
  * The admin's public allocation (Tham khảo).
  *
- * Only the admin writes this row; every logged-in user reads it. The
+ * Only the admin writes this row; the full row is readable only by the
+ * admin and approved followers (others only see that it exists). The
  * payload is PERCENT-ONLY: { symbol, name, percent }. Quantities,
  * values, invested amounts, notes and images are never stored here and
  * never leave the admin's own portfolio. The row also stores two public
@@ -9,15 +10,16 @@
  * (both percentages/dates — never money amounts).
  */
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import type { AllocationSlice } from "./portfolio";
 import { isAdminUser } from "./admin";
 import type { User } from "@supabase/supabase-js";
 
-export interface AdminAllocationSlice {
+export type AdminAllocationSlice = {
   symbol: string;
   name: string;
   percent: number;
-}
+};
 
 /** Số liệu công khai kèm theo portfolio đã đăng — chỉ % và thời gian, không số tiền. */
 export interface AdminAllocationStats {
@@ -78,7 +80,7 @@ export function selectPublishedAllocation(
   const followed = followedId
     ? investors.find((a) => a.user_id === followedId)
     : undefined;
-  return followed ?? investors[0];
+  return followed ?? investors[0] ?? null;
 }
 
 /**
@@ -155,7 +157,7 @@ function parseRow(row: AdminAllocationRow): AdminAllocation {
     updated_at: row.updated_at,
     startedAt: row.started_at ?? null,
     pnlPct: Number.isFinite(pnl) ? pnl : null,
-    message: message ? row.message : null,
+    message: message ? (row.message ?? null) : null,
     messageUpdatedAt: row.message_updated_at ?? null,
   };
 }
@@ -209,17 +211,31 @@ export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
 
 /**
  * Reads every published allocation — danh sách nhà đầu tư đã đăng để user
- * chọn và theo dõi (tab Tham khảo). Chỉ admin mới ghi được (RLS), nên
- * hiện danh sách chỉ có admin sau khi họ bấm "Đăng portfolio". Đọc được
- * mọi hàng nhờ policy "admin allocation select all". Trả về [] khi bảng
- * chưa có hoặc migration chưa áp dụng, để UI hiện trạng thái trống.
+ * chọn và theo dõi (tab Tham khảo). Chỉ admin mới ghi được (RLS).
+ *
+ * Quyền đọc do backend quyết định: hàm `list_published_investors` chỉ trả
+ * về ai đã đăng + lúc cập nhật (để hiện thẻ khóa và nút theo dõi); toàn bộ
+ * tỷ lệ %, lãi/lỗ và lời nhắn chỉ đọc được bởi chính nhà đầu tư hoặc người
+ * đã được duyệt theo dõi. Hàng chưa được xem thì trả về với dữ liệu rỗng.
+ * Trả về [] khi bảng chưa có, để UI hiện trạng thái trống.
  */
 export async function fetchPublishedAllocations(): Promise<AdminAllocation[]> {
+  let listed: { user_id: string; updated_at: string }[] = [];
+  try {
+    const { data, error } = await supabase.rpc("list_published_investors");
+    if (!error && Array.isArray(data)) {
+      listed = data as { user_id: string; updated_at: string }[];
+    }
+  } catch {
+    // Bỏ qua — vẫn thử đọc các hàng được phép xem bên dưới.
+  }
+
   const selects = [
     "user_id, slices, updated_at, started_at, pnl_pct, message, message_updated_at",
     "user_id, slices, updated_at, started_at, pnl_pct",
     "user_id, slices, updated_at",
   ];
+  let visible: AdminAllocation[] = [];
   for (const columns of selects) {
     try {
       const { data, error } = await supabase
@@ -227,14 +243,31 @@ export async function fetchPublishedAllocations(): Promise<AdminAllocation[]> {
         .select(columns)
         .order("updated_at", { ascending: false });
       if (!error) {
-        const rows = (data ?? []) as AdminAllocationRow[];
-        return rows.map(parseRow);
+        visible = ((data ?? []) as unknown as AdminAllocationRow[]).map(parseRow);
+        break;
       }
     } catch {
       // Thử với ít cột hơn (migration chưa áp dụng).
     }
   }
-  return [];
+
+  const byId = new Map(visible.map((a) => [a.user_id, a]));
+  const merged: AdminAllocation[] = listed.map(
+    (row) =>
+      byId.get(row.user_id) ?? {
+        user_id: row.user_id,
+        slices: [],
+        updated_at: row.updated_at,
+        startedAt: null,
+        pnlPct: null,
+        message: null,
+        messageUpdatedAt: null,
+      },
+  );
+  for (const a of visible) {
+    if (!listed.some((r) => r.user_id === a.user_id)) merged.push(a);
+  }
+  return merged.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 /**
@@ -259,8 +292,9 @@ export async function syncAdminAllocation(
   if (!isAdminUser(user)) return "skipped";
   const slices = buildAdminAllocationSlices(allocation.slices);
   if (slices.length === 0) return "skipped";
+  const trimmedMessage = message?.trim() ?? "";
   const normalizedMessage =
-    message === undefined ? undefined : message.trim() ? message.trim() : null;
+    message === undefined ? undefined : trimmedMessage ? trimmedMessage : null;
   const existing = await fetchAdminAllocation();
   if (
     existing &&
@@ -271,7 +305,7 @@ export async function syncAdminAllocation(
   ) {
     return "unchanged";
   }
-  const payload: Record<string, unknown> = {
+  const payload: TablesInsert<"admin_allocations"> = {
     user_id: user.id,
     slices,
     started_at: stats.startedAt,
@@ -292,7 +326,7 @@ export async function syncAdminAllocation(
       );
     }
     // Cột stats chưa có: ghi lại chỉ với slices (+ lời nhắn nếu có).
-    const retry: Record<string, unknown> = { user_id: user.id, slices };
+    const retry: TablesInsert<"admin_allocations"> = { user_id: user.id, slices };
     if (normalizedMessage !== undefined) {
       retry.message = normalizedMessage;
       retry.message_updated_at = new Date().toISOString();

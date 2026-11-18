@@ -1,0 +1,1 @@
+ALTER FUNCTION public.auto_confirm_synthetic_users() SET search_path = '';

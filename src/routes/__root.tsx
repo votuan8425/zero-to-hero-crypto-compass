@@ -132,7 +132,7 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     // Không gắn className ở đây: giao diện tối/trắng do script trong <head>
     // gắn class .dark ngay lúc tải trang (tránh nháy + tránh lệch hydration).
-    <html lang="vi">
+    <html lang="vi" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

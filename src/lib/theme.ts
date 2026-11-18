@@ -56,7 +56,7 @@ export function setTheme(theme: Theme) {
 
 /** Theme cho giao diện React (nút chuyển ở Cá nhân). */
 export function useTheme(): [Theme, (t: Theme) => void] {
-  const theme = useSyncExternalStore(subscribeTheme, currentTheme, () => "dark");
+  const theme = useSyncExternalStore(subscribeTheme, currentTheme, (): Theme => "dark");
   return [theme, setTheme];
 }
 

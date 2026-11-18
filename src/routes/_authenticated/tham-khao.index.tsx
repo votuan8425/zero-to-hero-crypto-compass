@@ -573,7 +573,7 @@ function ReferencesPage() {
                 isOwn={isOwn}
                 followStatus={followMap[inv.user_id] ?? null}
                 isAdmin={isOwn}
-                onEditMessage={isOwn ? () => setMessageDialogOpen(true) : undefined}
+                {...(isOwn ? { onEditMessage: () => setMessageDialogOpen(true) } : {})}
                 onRequestFollow={() => void sendFollowRequest(inv.user_id)}
                 onCancelFollow={() => void cancelFollowRequest(inv.user_id)}
                 busy={followBusy === inv.user_id}
