@@ -33,6 +33,9 @@ export interface PortfolioHistory {
   pnl: number;
   /** PNL chia cho (giá trị đầu kỳ + tiền mua thêm). */
   pnlPct: number | null;
+  /** Biên thời gian của kỳ (để chart vẽ theo trục thời gian thật). */
+  fromMs: number;
+  toMs: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -86,6 +89,8 @@ const EMPTY: PortfolioHistory = {
   deposits: 0,
   pnl: 0,
   pnlPct: null,
+  fromMs: 0,
+  toMs: 0,
 };
 
 /** Tính PNL kỳ từ giá trị đầu/cuối và tiền mua thêm trong kỳ. */
@@ -162,6 +167,17 @@ export function computePortfolioHistory(
   while (first < points.length && points[first]!.value <= 0) first++;
   const trimmed = points.slice(first);
   if (trimmed.length === 0) return EMPTY;
+  if (trimmed[0]!.t > fromMs) {
+    // Mốc neo đầu kỳ để đường bắt đầu đúng ở mép trái theo trục thời gian:
+    // chưa mua gì thì phẳng ở 0, đã mua từ trước thì bằng giá trị lúc đó.
+    trimmed.unshift({ t: fromMs, value: startValue });
+    if (startValue === 0) {
+      // Thêm 1 điểm 0 ngay tại mốc đầu tiên có giá trị để đường đi ngang
+      // ở 0 rồi nhảy thẳng đứng lên đúng ngày mua (logic OKX) — không
+      // chéo dần từ đầu kỳ lên như khi chỉ có 1 điểm neo.
+      trimmed.splice(1, 0, { t: trimmed[1]!.t, value: 0 });
+    }
+  }
   const endValue = trimmed[trimmed.length - 1]!.value;
   return {
     points: trimmed,
@@ -169,6 +185,8 @@ export function computePortfolioHistory(
     endValue,
     deposits,
     ...pnlOf(startValue, endValue, deposits),
+    fromMs,
+    toMs,
   };
 }
 
@@ -198,6 +216,8 @@ export function withLiveEndpoint(
     endValue,
     deposits: h.deposits,
     ...pnlOf(startValue, endValue, h.deposits),
+    fromMs: h.fromMs,
+    toMs: h.toMs,
   };
 }
 

@@ -155,9 +155,7 @@ function HomePage() {
               </div>
             )}
             <div className="mt-2 text-sm">
-              {hovered != null ? (
-                <span className="text-muted-foreground">{formatDateTime(hovered.t)}</span>
-              ) : history && history.points.length > 0 ? (
+              {history && history.points.length > 0 ? (
                 <>
                   <div>
                     <span className="text-muted-foreground">
@@ -185,7 +183,13 @@ function HomePage() {
               {txs.isLoading || historyQuery.isLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : history && history.points.length > 0 ? (
-                <PortfolioChart points={history.points} onHover={setHovered} />
+                <PortfolioChart
+                  points={history.points}
+                  fromMs={history.fromMs}
+                  toMs={history.toMs}
+                  formatValue={money}
+                  onHover={setHovered}
+                />
               ) : (
                 <p className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
                   {historyQuery.isError

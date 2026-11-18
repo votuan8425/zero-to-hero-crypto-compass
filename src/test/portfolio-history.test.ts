@@ -68,6 +68,37 @@ describe("lịch sử giá trị danh mục", () => {
     expect(h.pnlPct).toBeCloseTo(-30 / 190 * 100, 6);
   });
 
+  it("chưa mua gì đầu kỳ thì đường phẳng ở 0 từ đầu kỳ tới lần mua đầu", () => {
+    // Mua 1 BTC duy nhất ngày 3: trước đó không có gì nên đường đi ngang
+    // ở 0, rồi nhảy lên đúng ngày mua.
+    const h = computePortfolioHistory(
+      [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-03" })],
+      { BTC: daily([100, 110, 120, 130]) },
+      t0,
+      t0 + 3 * DAY,
+    );
+    expect(h.points).toEqual([
+      { t: t0, value: 0 },
+      { t: t0 + 2 * DAY, value: 0 },
+      { t: t0 + 2 * DAY, value: 120 },
+      { t: t0 + 3 * DAY, value: 130 },
+    ]);
+    expect(h.startValue).toBe(0);
+    expect(h.deposits).toBe(100);
+    expect(h.pnl).toBe(30);
+  });
+
+  it("đã mua từ trước kỳ thì đường bắt đầu ở đầu kỳ bằng giá trị lúc đó", () => {
+    const h = computePortfolioHistory(
+      [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-10-01", price_usd: 100 })],
+      { BTC: daily([100, 90, 80]) },
+      t0,
+      t0 + 2 * DAY,
+    );
+    expect(h.points[0]).toEqual({ t: t0, value: 100 });
+    expect(h.points.map((p) => p.value)).toEqual([100, 90, 80]);
+  });
+
   it("không mua thêm trong kỳ thì PNL là biến động giá thuần", () => {
     const h = computePortfolioHistory(
       [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-10-01", price_usd: 100 })],
@@ -110,17 +141,6 @@ describe("lịch sử giá trị danh mục", () => {
     expect(h.points.map((p) => p.value)).toEqual([100, 110 + 200]);
   });
 
-  it("đường bắt đầu từ lần mua đầu, không vẽ đoạn 0 trước đó", () => {
-    const h = computePortfolioHistory(
-      [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-03" })],
-      { BTC: daily([100, 110, 120, 130]) },
-      t0,
-      t0 + 3 * DAY,
-    );
-    expect(h.points.map((p) => p.value)).toEqual([120, 130]);
-    expect(h.points[0]?.t).toBe(t0 + 2 * DAY);
-  });
-
   it("chưa mua gì hoặc không có giá thì rỗng", () => {
     expect(computePortfolioHistory([], { BTC: daily([100]) }, t0, t0).points).toEqual([]);
     expect(
@@ -149,6 +169,8 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
     deposits: 0,
     pnl: 20,
     pnlPct: 20,
+    fromMs: t0,
+    toMs: t0 + 3 * DAY,
   };
 
   it("điểm cuối cũ hơn 1 giờ thì thêm điểm bây giờ", () => {
@@ -183,6 +205,24 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
     expect(h.endValue).toBe(150);
     expect(h.pnl).toBe(0);
     expect(h.pnlPct).toBe(0);
+  });
+});
+
+import { nearestPointIndex } from "@/components/app/portfolio-chart";
+
+describe("điểm gần nhất theo thời gian cho hover", () => {
+  const pts = [
+    { t: 0, value: 10 },
+    { t: 10, value: 20 },
+    { t: 20, value: 30 },
+  ];
+
+  it("chọn điểm có mốc thời gian gần nhất", () => {
+    expect(nearestPointIndex(pts, 0)).toBe(0);
+    expect(nearestPointIndex(pts, 12)).toBe(1);
+    expect(nearestPointIndex(pts, 19)).toBe(2);
+    expect(nearestPointIndex(pts, 100)).toBe(2);
+    expect(nearestPointIndex([], 5)).toBe(null);
   });
 });
 
