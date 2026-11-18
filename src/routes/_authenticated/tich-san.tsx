@@ -45,7 +45,7 @@ import {
 } from "@/lib/accumulation";
 import type { Tx } from "@/lib/portfolio";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
-import { displaySymbol } from "@/lib/coins";
+import { quantityUnit } from "@/lib/coins";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tich-san")({
@@ -385,7 +385,7 @@ function AccumulatePage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="num font-semibold">
-                                +{formatNumber(t.quantity)} {displaySymbol(t.symbol)}
+                                +{formatNumber(t.quantity)} {quantityUnit(t.symbol)}
                               </span>
                               {pendingIds.has(t.id) && (
                                 <Badge
@@ -447,7 +447,7 @@ function AccumulatePage() {
             <AlertDialogTitle>Xoá giao dịch này?</AlertDialogTitle>
             <AlertDialogDescription>
               {toDelete &&
-                `${formatNumber(toDelete.quantity)} ${displaySymbol(toDelete.symbol)} ngày ${formatDate(toDelete.tx_date)}. `}
+                `${formatNumber(toDelete.quantity)} ${quantityUnit(toDelete.symbol)} ngày ${formatDate(toDelete.tx_date)}. `}
               Thao tác này sẽ xoá trên mọi thiết bị và không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>

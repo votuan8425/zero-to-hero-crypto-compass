@@ -1,7 +1,6 @@
 import { COINS } from "./coins";
 import type { PriceMap } from "./portfolio";
 import {
-  SILVER_SYMBOL,
   bucketPricesToCandles,
   type CandlesResult,
   type ChartRange,
@@ -31,7 +30,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 /** Giá thị trường lấy trực tiếp từ trình duyệt (CoinGecko + tỷ giá). */
 export async function fetchPricesFromBrowser(): Promise<PricesResult> {
-  const ids = COINS.map((c) => c.geckoId).join(",");
+  const ids = COINS.filter((c) => !c.unit)
+    .map((c) => c.geckoId)
+    .join(",");
   const [gecko, fx] = await Promise.all([
     fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
       `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
@@ -42,30 +43,15 @@ export async function fetchPricesFromBrowser(): Promise<PricesResult> {
   ]);
   const usd: Record<string, { usd: number; change24h: number | null }> = {};
   for (const c of COINS) {
+    // Vàng/bạc tính theo giá SJC / Ancarat (chỉ lấy được qua server), không
+    // dùng giá ounce thế giới ở đây để tránh sai đơn vị.
+    if (c.unit) continue;
     if (c.symbol === "USDT") {
       usd[c.symbol] = { usd: 1, change24h: 0 };
       continue;
     }
     const p = gecko[c.geckoId];
     if (p?.usd != null) usd[c.symbol] = { usd: p.usd, change24h: p.usd_24h_change ?? null };
-  }
-  // Bạc: simple/price trả về {} cho kinesis-silver nên lấy bằng market_chart.
-  if (!usd[SILVER_SYMBOL]) {
-    try {
-      const j = await fetchJson<{ prices?: [number, number][] }>(
-        "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=1",
-      );
-      const rows = (j.prices ?? []).filter(([, c]) => Number.isFinite(c) && c > 0);
-      if (rows.length >= 2) {
-        const first = rows[0]?.[1] ?? 0;
-        const last = rows[rows.length - 1]?.[1] ?? 0;
-        if (last > 0 && first > 0) {
-          usd[SILVER_SYMBOL] = { usd: last, change24h: ((last - first) / first) * 100 };
-        }
-      }
-    } catch {
-      // Để trống, UI sẽ hiện "Chưa có giá" cho bạc.
-    }
   }
   const usdVnd = fx.rates?.["VND"] ?? null;
   const usdKrw = fx.rates?.["KRW"] ?? null;

@@ -7,7 +7,8 @@ import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfol
 import { normalizeCurrency, type Currency } from "@/lib/format";
 import { useUser } from "./use-user";
 
-const PRICE_CACHE = "zth:prices";
+/** v2: vàng/bạc đổi sang giá SJC (chỉ) / Ancarat (lượng) — bỏ giá ounce cũ đã lưu. */
+const PRICE_CACHE = "zth:prices:v2";
 
 function readPriceCache(): PricesResult | null {
   try {
@@ -46,7 +47,8 @@ export const pricesQuery = queryOptions({
     if (res.error) {
       try {
         const direct = await fetchPricesFromBrowser();
-        if (!direct.error) res = direct;
+        // Giữ giá vàng/bạc server đã lấy được (trình duyệt không lấy được SJC/Ancarat).
+        if (!direct.error) res = { ...direct, prices: { ...res.prices, ...direct.prices } };
       } catch {
         // Giữ nguyên lỗi của server, rơi xuống giá lưu ở dưới.
       }

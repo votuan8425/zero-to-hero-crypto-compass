@@ -21,10 +21,9 @@ import { PriceChartDialog } from "@/components/app/price-chart-dialog";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
 import { computeMonthlyStreak, groupByMonth, monthKeyOf, monthLabel } from "@/lib/accumulation";
-import { GOLD_SYMBOL } from "@/lib/prices.functions";
 import type { PriceMap } from "@/lib/portfolio";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
-import { COINS, displaySymbol } from "@/lib/coins";
+import { COINS, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
 import { loadFavorites, saveFavorites, toggleFavorite } from "@/lib/favorites";
 import { scanLegacyData } from "@/lib/legacy-migration";
 import { cn } from "@/lib/utils";
@@ -225,6 +224,7 @@ function HomePage() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
                         Avg {money(h.avgCostUsd)}
+                        {getCoin(h.symbol)?.unit ? ` / ${getCoin(h.symbol)?.unit}` : ""}
                       </span>
                       {h.priceUsd != null && (
                         <span className="num text-xs text-muted-foreground">
@@ -233,7 +233,7 @@ function HomePage() {
                       )}
                     </div>
                     <div className="num mt-1 text-xs text-muted-foreground">
-                      {formatNumber(h.quantity)} {displaySymbol(h.symbol)} · {h.purchases} lần mua
+                      {formatNumber(h.quantity)} {quantityUnit(h.symbol)} · {h.purchases} lần mua
                     </div>
                   </div>
                   <div className="text-right">
@@ -258,7 +258,7 @@ function HomePage() {
  * Bảng giá kiểu OKX: toàn bộ coin hỗ trợ, kéo cuộn để xem hết. Bấm ngôi sao
  * để ghim tối đa 3 coin yêu thích lên đầu (mặc định BTC, ETH, Vàng — lưu trên
  * thiết bị này). Bấm vào một coin để mở popup biểu đồ theo ngày / tháng / năm.
- * Vàng tính theo ounce (PAXG ≈ 1 ounce), Bạc theo KAG (CoinGecko).
+ * Vàng theo giá SJC mỗi chỉ, bạc theo giá Ancarat mỗi lượng (mua vào · bán ra).
  */
 function MarketPrices({
   prices,
@@ -326,12 +326,16 @@ function MarketPrices({
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold">{c.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {c.symbol === GOLD_SYMBOL ? "PAXG" : displaySymbol(c.symbol)}
-                        {c.unit === "ounce" ? " · 1 ounce" : ""}
+                        {displaySymbol(c.symbol)}
+                        {c.unit ? ` · 1 ${c.unit}` : ""}
                       </span>
                     </div>
                     <div className="num text-xs text-muted-foreground">
-                      {q ? money(q.usd) : "Chưa có giá"}
+                      {!q
+                        ? "Chưa có giá"
+                        : q.askVnd != null
+                          ? `Mua ${money(q.usd)} · Bán ${money(usdVnd ? q.askVnd / usdVnd : null)}`
+                          : money(q.usd)}
                     </div>
                   </div>
                   <div className="text-right">
@@ -379,6 +383,7 @@ function MarketPrices({
         currency={currency}
         usdVnd={usdVnd}
         usdKrw={usdKrw}
+        quote={chartSymbol ? prices?.[chartSymbol] : undefined}
       />
     </section>
   );

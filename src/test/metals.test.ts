@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COINS, coinName, getCoin } from "@/lib/coins";
+import { COINS, coinName, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
+import { parseAncaratSilver, parsePnjSjc, parseSjcGold } from "@/lib/metals";
 import { GOLD_SYMBOL, SILVER_SYMBOL } from "@/lib/prices.functions";
 import { computeAllocation, computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
 
@@ -36,10 +37,18 @@ describe("vàng và bạc trong danh sách mua", () => {
     expect(getCoin(SILVER_SYMBOL)?.geckoId).toBe("kinesis-silver");
   });
 
-  it("số lượng kim loại quý tính theo ounce", () => {
-    expect(getCoin("PAXG")?.unit).toBe("ounce");
-    expect(getCoin("KAG")?.unit).toBe("ounce");
+  it("vàng mua theo chỉ, bạc mua theo lượng", () => {
+    expect(getCoin("PAXG")?.unit).toBe("chỉ");
+    expect(getCoin("KAG")?.unit).toBe("lượng");
     expect(getCoin("BTC")?.unit).toBeUndefined();
+    expect(quantityUnit("PAXG")).toBe("chỉ");
+    expect(quantityUnit("KAG")).toBe("lượng");
+    expect(quantityUnit("BTC")).toBe("BTC");
+  });
+
+  it("vàng hiển thị nguồn SJC, bạc hiển thị nguồn Ancarat", () => {
+    expect(displaySymbol("PAXG")).toBe("SJC");
+    expect(displaySymbol("KAG")).toBe("Ancarat");
   });
 });
 
@@ -90,5 +99,49 @@ describe("giá trị danh mục của vàng và bạc", () => {
     const { slices } = computeAllocation(holdings);
     expect(slices.map((s) => s.symbol).sort()).toEqual(["KAG", "PAXG"]);
     expect(slices.reduce((s, x) => s + x.percent, 0)).toBeCloseTo(100, 6);
+  });
+});
+
+describe("giá vàng SJC và bạc Ancarat", () => {
+  const sjc = {
+    success: true,
+    data: [
+      { Id: 1, TypeName: "Vàng SJC 1L, 10L, 1KG", BuyValue: 134200000, SellValue: 137200000, BuyDifferValue: 0 },
+      { Id: 33, TypeName: "Vàng SJC 0.5 chỉ, 1 chỉ, 2 chỉ", BuyValue: 134200000, SellValue: 137230000, BuyDifferValue: 0 },
+      { Id: 49, TypeName: "Vàng nhẫn SJC 99,99% 1 chỉ, 2 chỉ, 5 chỉ", BuyValue: 133000000, SellValue: 137000000, BuyDifferValue: 0 },
+    ],
+  };
+
+  it("vàng SJC: lấy loại 1 chỉ, đổi giá mỗi lượng thành giá mỗi chỉ (chia 10)", () => {
+    const q = parseSjcGold(sjc);
+    expect(q?.bidVnd).toBe(13420000);
+    expect(q?.askVnd).toBe(13723000);
+    expect(q?.source).toBe("SJC");
+  });
+
+  it("vàng SJC: không có loại 1 chỉ thì dùng miếng 1 lượng", () => {
+    const q = parseSjcGold({ data: [sjc.data[0], sjc.data[2]] });
+    expect(q?.askVnd).toBe(13720000);
+  });
+
+  it("dự phòng PNJ: dòng vàng miếng SJC tính nghìn đồng mỗi chỉ", () => {
+    const q = parsePnjSjc({ data: [{ masp: "SJC", giaban: 13720, giamua: 13420 }] });
+    expect(q?.askVnd).toBe(13720000);
+    expect(q?.bidVnd).toBe(13420000);
+  });
+
+  it("bạc Ancarat: bán ra trước, mua vào sau, giá mỗi lượng", () => {
+    const html =
+      '<td><a href="x">Ngân Long Quảng Tiến 999 - 1 lượng</a></td><td class="a">1,598,000</td><td class="b">1,545,000</td>';
+    const q = parseAncaratSilver(html);
+    expect(q?.askVnd).toBe(1598000);
+    expect(q?.bidVnd).toBe(1545000);
+    expect(q?.source).toBe("Ancarat");
+  });
+
+  it("không đọc được thì không bịa giá", () => {
+    expect(parseSjcGold({ data: [] })).toBeNull();
+    expect(parseAncaratSilver("<html></html>")).toBeNull();
+    expect(parsePnjSjc({ data: [] })).toBeNull();
   });
 });

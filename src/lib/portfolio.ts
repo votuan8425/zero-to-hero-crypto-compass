@@ -19,6 +19,10 @@ export interface PriceQuote {
   vnd: number;
   krw: number;
   change24h: number | null;
+  /** Vàng/bạc: giá cửa hàng bán ra (VND mỗi chỉ / lượng); `vnd` là giá mua vào. */
+  askVnd?: number;
+  /** Vàng/bạc: nguồn giá (SJC, Ancarat). */
+  source?: string;
 }
 
 export type PriceMap = Record<string, PriceQuote>;
