@@ -20,7 +20,10 @@ function readPriceCache(): PricesResult | null {
 }
 
 
-/** Live prices, refreshed every minute; falls back to the last known prices when offline.
+/** Live prices, refreshed every 15 minutes; falls back to the last known prices when offline.
+ *  Vàng/bạc giữ lịch riêng của nguồn trong nước (SJC/Ancarat cập nhật
+ *  06:00/22:00 giờ VN) — cùng 1 lần lấy giá nhưng giá trị của chúng chỉ đổi
+ *  khi kho cập nhật.
  *  Tách riêng thành pricesQuery để màn hình chờ (boot) prefetch được giá
  *  cùng lúc với giao dịch/hồ sơ — vào app rồi thì Trang chủ có sẵn giá,
  *  không phải chờ tải. */
@@ -66,8 +69,8 @@ export const pricesQuery = queryOptions({
     );
     return res;
   },
-  staleTime: 30_000,
-  refetchInterval: 60_000,
+  staleTime: 15 * 60_000,
+  refetchInterval: 15 * 60_000,
   placeholderData: (prev) => prev,
 });
 

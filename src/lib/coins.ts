@@ -20,7 +20,6 @@ export const COINS: CoinInfo[] = [
   { symbol: "BNB", name: "BNB", geckoId: "binancecoin" },
   { symbol: "XRP", name: "XRP", geckoId: "ripple" },
   { symbol: "USDT", name: "Tether", geckoId: "tether" },
-  { symbol: "USDC", name: "USD Coin", geckoId: "usd-coin" },
   { symbol: "ADA", name: "Cardano", geckoId: "cardano" },
   { symbol: "DOGE", name: "Dogecoin", geckoId: "dogecoin" },
   { symbol: "TRX", name: "TRON", geckoId: "tron" },
@@ -31,19 +30,8 @@ export const COINS: CoinInfo[] = [
   { symbol: "SUI", name: "Sui", geckoId: "sui" },
   { symbol: "NEAR", name: "NEAR Protocol", geckoId: "near" },
   { symbol: "LTC", name: "Litecoin", geckoId: "litecoin" },
-  { symbol: "POL", name: "Polygon", geckoId: "polygon-ecosystem-token" },
-  { symbol: "ARB", name: "Arbitrum", geckoId: "arbitrum" },
-  { symbol: "OP", name: "Optimism", geckoId: "optimism" },
-  { symbol: "APT", name: "Aptos", geckoId: "aptos" },
-  { symbol: "ATOM", name: "Cosmos", geckoId: "cosmos" },
-  { symbol: "UNI", name: "Uniswap", geckoId: "uniswap" },
-  { symbol: "INJ", name: "Injective", geckoId: "injective-protocol" },
-  { symbol: "TAO", name: "Bittensor", geckoId: "bittensor" },
   { symbol: "HYPE", name: "Hyperliquid", geckoId: "hyperliquid" },
-  { symbol: "ENA", name: "Ethena", geckoId: "ethena" },
   { symbol: "OKB", name: "OKB", geckoId: "okb" },
-  { symbol: "PEPE", name: "Pepe", geckoId: "pepe" },
-  { symbol: "SHIB", name: "Shiba Inu", geckoId: "shiba-inu" },
 ];
 
 const BY_SYMBOL = new Map(COINS.map((c) => [c.symbol, c]));
