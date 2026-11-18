@@ -66,9 +66,9 @@ export async function fetchMyFollowMap(): Promise<Record<string, FollowStatus>> 
 }
 
 /** Gửi yêu cầu theo dõi (hoặc gửi lại sau khi bị từ chối).
- * Admin theo dõi chính mình thì duyệt ngay lập tức (không có trạng thái
- * "đang chờ duyệt" trên chính danh mục của mình — admin không cần chờ ai
- * duyệt để xem danh mục của mình). */
+ * Luôn gửi ở trạng thái 'pending' — RLS bắt buộc người theo dõi chỉ được
+ * tạo yêu cầu chờ duyệt, không được tự đặt 'approved' (kể cả admin tự
+ * theo dõi mình cũng gửi 'pending' rồi tự duyệt ở bảng cuối trang). */
 export async function requestFollow(investorId: string): Promise<void> {
   const {
     data: { user },
@@ -80,14 +80,12 @@ export async function requestFollow(investorId: string): Promise<void> {
     (typeof meta["username"] === "string" && meta["username"]) ||
     (typeof user.email === "string" ? user.email.split("@")[0] : "") ||
     null;
-  const status: FollowStatus =
-    investorId === user.id ? "approved" : "pending";
   const { error } = await supabase.from("investor_follows").upsert(
     {
       investor_id: investorId,
       follower_id: user.id,
       follower_name: followerName,
-      status,
+      status: "pending",
     },
     { onConflict: "investor_id,follower_id" },
   );
