@@ -1,11 +1,14 @@
 /**
- * Biểu đồ xu hướng tổng giá trị tài sản kiểu OKX: đường + vùng tô dưới,
- * màu xanh khi kỳ đang tăng, đỏ khi giảm.
+ * Biểu đồ xu hướng tổng giá trị tài sản kiểu OKX: đường + vùng chấm
+ * (lưới chấm như OKX) dưới đường, màu xanh khi kỳ đang tăng, đỏ khi giảm.
  *
  * Tương tác: rê chuột (hoặc chạm kéo trên điện thoại) → đường kẻ dọc +
  * chấm tròn tại điểm gần nhất, giá trị và thời điểm hiện ở tiêu đề phía
  * trên (do component cha giữ qua onHover). Rời chuột thì về lại giá trị
  * hiện tại. Không có pan/zoom — các kỳ 1W/1M/3M/1Y đổi bằng nút chọn.
+ *
+ * Khung hình 2:1 — component cha đặt khối chứa theo tỉ lệ này để đường
+ * và các chấm không bị kéo méo.
  */
 
 import { useId, useMemo, useRef, useState } from "react";
@@ -13,10 +16,13 @@ import type { HistoryPoint } from "@/lib/portfolio-history";
 import { cn } from "@/lib/utils";
 
 const W = 640;
-const H = 180;
+const H = 320;
 const PAD_X = 4;
-const PAD_TOP = 14;
-const PAD_BOTTOM = 10;
+const PAD_TOP = 18;
+const PAD_BOTTOM = 12;
+/** Khoảng cách lưới chấm kiểu OKX (px trong khung viewBox). */
+const DOT_STEP = 16;
+const DOT_R = 1.8;
 
 export function PortfolioChart({
   points,
@@ -27,7 +33,7 @@ export function PortfolioChart({
   onHover: (p: HistoryPoint | null) => void;
   className?: string;
 }) {
-  const gradientId = useId();
+  const dotsId = useId();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const up = points.length >= 2 ? points[points.length - 1]!.value >= points[0]!.value : true;
@@ -90,11 +96,11 @@ export function PortfolioChart({
   const hovered = hoverIdx != null ? points[hoverIdx] : null;
 
   return (
-    <div className={cn(up ? "text-gain" : "text-loss", className)}>
+    <div className={cn("h-full w-full", up ? "text-gain" : "text-loss", className)}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="block h-[180px] w-full touch-none select-none"
+        className="block h-full w-full touch-none select-none"
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
         onPointerDown={onPointerMove}
@@ -102,21 +108,32 @@ export function PortfolioChart({
         aria-label="Biểu đồ xu hướng tổng giá trị tài sản"
       >
         <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-          </linearGradient>
+          <pattern
+            id={dotsId}
+            width={DOT_STEP}
+            height={DOT_STEP}
+            patternUnits="userSpaceOnUse"
+          >
+            <circle
+              cx={DOT_STEP / 2}
+              cy={DOT_STEP / 2}
+              r={DOT_R}
+              fill="var(--muted-foreground)"
+              fillOpacity="0.55"
+            />
+          </pattern>
         </defs>
         {geom && (
           <>
-            {geom.area && <path d={geom.area} fill={`url(#${gradientId})`} />}
+            {geom.area && <path d={geom.area} fill={`url(#${dotsId})`} />}
             <path
               d={geom.line}
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.5"
               strokeLinejoin="round"
               strokeLinecap="round"
+              style={{ filter: "drop-shadow(0 0 5px currentColor)" }}
             />
             {hovered && hoverIdx != null && (
               <g>
@@ -133,14 +150,14 @@ export function PortfolioChart({
                 <circle
                   cx={geom.x(hoverIdx)}
                   cy={geom.y(hovered.value)}
-                  r="9"
+                  r="10"
                   fill="currentColor"
                   fillOpacity="0.18"
                 />
                 <circle
                   cx={geom.x(hoverIdx)}
                   cy={geom.y(hovered.value)}
-                  r="4"
+                  r="4.5"
                   fill="currentColor"
                   stroke="var(--background)"
                   strokeWidth="1.5"
@@ -151,7 +168,7 @@ export function PortfolioChart({
               <circle
                 cx={geom.x(points.length - 1)}
                 cy={geom.y(points[points.length - 1]!.value)}
-                r="4"
+                r="4.5"
                 fill="currentColor"
                 stroke="var(--background)"
                 strokeWidth="1.5"

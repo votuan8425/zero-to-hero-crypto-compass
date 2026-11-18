@@ -138,72 +138,89 @@ function HomePage() {
       )}
 
       <section className="panel hero-glow relative overflow-hidden p-5 md:p-7">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Tổng giá trị ước tính
-        </div>
-        {txs.isLoading ? (
-          <Skeleton className="mt-3 h-10 w-56" />
-        ) : (
-          <div className="num mt-2 text-3xl font-bold tracking-tight md:text-5xl">
-            {hovered != null && history && history.points.length > 0
-              ? money(hovered.value)
-              : totals.valueUsd != null
-                ? money(totals.valueUsd)
-                : holdings.length === 0
-                  ? money(0)
-                  : "—"}
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Tổng giá trị ước tính
+            </div>
+            {txs.isLoading ? (
+              <Skeleton className="mt-3 h-10 w-56" />
+            ) : (
+              <div
+                className={cn(
+                  "num mt-2 font-bold tracking-tight",
+                  holdings.length === 0
+                    ? "text-3xl md:text-5xl"
+                    : "text-2xl sm:text-3xl md:text-4xl xl:text-5xl",
+                )}
+              >
+                {hovered != null && history && history.points.length > 0
+                  ? money(hovered.value)
+                  : totals.valueUsd != null
+                    ? money(totals.valueUsd)
+                    : holdings.length === 0
+                      ? money(0)
+                      : "—"}
+              </div>
+            )}
+            <div className="mt-2 text-sm">
+              {hovered != null ? (
+                <span className="text-muted-foreground">{formatDateTime(hovered.t)}</span>
+              ) : history && history.points.length > 0 ? (
+                <>
+                  <span className="text-muted-foreground">
+                    PNL trong {historyPeriodLabel(period)}{" "}
+                  </span>
+                  <PnlText value={history.pnl} className="font-semibold">
+                    {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
+                  </PnlText>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  PNL trong {historyPeriodLabel(period)} —
+                </span>
+              )}
+            </div>
           </div>
-        )}
-        <div className="mt-2 text-sm">
-          {hovered != null ? (
-            <span className="text-muted-foreground">{formatDateTime(hovered.t)}</span>
-          ) : history && history.points.length > 0 ? (
-            <>
-              <span className="text-muted-foreground">PNL trong {historyPeriodLabel(period)} </span>
-              <PnlText value={history.pnl} className="font-semibold">
-                {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
-              </PnlText>
-            </>
-          ) : (
-            <span className="text-muted-foreground">PNL trong {historyPeriodLabel(period)} —</span>
+          {holdings.length > 0 && (
+            <div className="aspect-[2/1] w-[46%] shrink-0 sm:w-[48%] md:w-[52%]">
+              {txs.isLoading || historyQuery.isLoading ? (
+                <Skeleton className="h-full w-full" />
+              ) : history && history.points.length > 0 ? (
+                <PortfolioChart points={history.points} onHover={setHovered} />
+              ) : (
+                <p className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                  {historyQuery.isError
+                    ? "Không tải được lịch sử giá."
+                    : "Chưa có dữ liệu lịch sử."}
+                </p>
+              )}
+            </div>
           )}
         </div>
         {holdings.length > 0 && (
-          <div className="mt-2">
-            {txs.isLoading || historyQuery.isLoading ? (
-              <Skeleton className="h-[180px] w-full" />
-            ) : history && history.points.length > 0 ? (
-              <PortfolioChart points={history.points} onHover={setHovered} />
-            ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {historyQuery.isError
-                  ? "Không tải được lịch sử giá. Kiểm tra mạng rồi mở lại trang."
-                  : "Chưa có dữ liệu lịch sử để vẽ xu hướng."}
-              </p>
-            )}
-            <div className="mt-1 flex justify-center">
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={period}
-                onValueChange={(v) => {
-                  if (!v) return;
-                  setPeriod(v as HistoryPeriod);
-                  setHovered(null);
-                }}
-                className="gap-0 rounded-full bg-muted p-1"
-              >
-                {HISTORY_PERIODS.map((p) => (
-                  <ToggleGroupItem
-                    key={p}
-                    value={p}
-                    className="h-8 rounded-full px-3 text-xs font-medium hover:bg-background/70 hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground"
-                  >
-                    {p}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
+          <div className="mt-1 flex justify-center">
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={period}
+              onValueChange={(v) => {
+                if (!v) return;
+                setPeriod(v as HistoryPeriod);
+                setHovered(null);
+              }}
+              className="gap-0 rounded-full bg-muted p-1"
+            >
+              {HISTORY_PERIODS.map((p) => (
+                <ToggleGroupItem
+                  key={p}
+                  value={p}
+                  className="h-8 rounded-full px-3 text-xs font-medium hover:bg-background/70 hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground"
+                >
+                  {p}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
           </div>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
