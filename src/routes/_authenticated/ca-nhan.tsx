@@ -51,7 +51,7 @@ import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { translateAuthError } from "@/lib/auth-errors";
 import { authEmailToUsername, isSyntheticAuthEmail } from "@/lib/username-auth";
-import { displaySymbol } from "@/lib/coins";
+import { quantityUnit } from "@/lib/coins";
 
 export const Route = createFileRoute("/_authenticated/ca-nhan")({
   head: () => ({
@@ -474,7 +474,7 @@ function LegacyMigration() {
             {records.slice(0, 50).map((r) => (
               <li key={r.importKey} className="num flex justify-between gap-2">
                 <span>
-                  {formatDate(r.tx_date)} · {formatNumber(r.quantity)} {displaySymbol(r.symbol)}
+                  {formatDate(r.tx_date)} · {formatNumber(r.quantity)} {quantityUnit(r.symbol)}
                 </span>
                 <span className="truncate text-muted-foreground">{r.source}</span>
               </li>

@@ -1,111 +1,100 @@
-import type { PriceMap } from "./portfolio";
-import type { PricesResult } from "./prices.functions";
-
-/** Quy tắc giá vàng/bạc — hằng số ký hiệu vàng/bạc nằm ngay dưới đây. */
-
 /**
- * Vàng: PAXG trên OKX làm proxy (1 PAXG ≈ 1 ounce vàng). Nằm trong COINS
- * nên xuất hiện trong danh sách chọn khi thêm lần mua, ngay sau ETH.
- */
-export const GOLD_SYMBOL = "PAXG";
-
-/**
- * Bạc: KAG (Kinesis Silver) trên CoinGecko làm proxy (1 KAG ≈ 1 ounce bạc).
- * OKX không có cặp bạc nào (đã kiểm chứng 2026-11-17: không có XAG/KAG/SLV
- * trong bảng tickers SPOT), nên bạc chỉ lấy từ CoinGecko, không qua OKX.
- */
-export const SILVER_SYMBOL = "KAG";
-
-/**
- * Quy tắc giá vàng/bạc (toàn app, không chỉ mục Giá thị trường):
- * - Luôn hiển thị bằng VND, bất kể tiền tệ hiển thị đã chọn.
- * - Chỉ cập nhật 2 lần/ngày, lúc 6h sáng và 22h tối (giờ Việt Nam).
- *   Giữa 2 khung giờ thì mọi chỗ hiển thị đều dùng giá đã chốt ở khung trước.
+ * Giá vàng / bạc trong nước (VND), tách riêng khỏi server function để dễ kiểm thử.
+ *
+ * - Vàng: theo SJC, loại "Vàng SJC 0.5 chỉ, 1 chỉ, 2 chỉ". SJC niêm yết theo
+ *   lượng nên chia 10 để ra giá mỗi chỉ (1 lượng = 10 chỉ).
+ * - Bạc: theo Ancarat, sản phẩm "Ngân Long Quảng Tiến 999 - 1 lượng", giá mỗi lượng.
+ *
+ * "Bán ra" là giá cửa hàng bán cho mình (dùng khi ghi lần mua);
+ * "Mua vào" là giá cửa hàng mua lại (dùng để định giá tài sản đang giữ).
  */
 
-export function isMetalSymbol(symbol: string): boolean {
-  return symbol === GOLD_SYMBOL || symbol === SILVER_SYMBOL;
+export interface MetalQuote {
+  /** Giá cửa hàng mua lại, VND mỗi đơn vị (chỉ / lượng). */
+  bidVnd: number;
+  /** Giá cửa hàng bán ra, VND mỗi đơn vị (chỉ / lượng). */
+  askVnd: number;
+  /** % thay đổi giá mua vào so với lần niêm yết trước, null nếu không có. */
+  change24h: number | null;
+  /** Nguồn hiển thị cho người dùng. */
+  source: string;
 }
 
+export const CHI_PER_LUONG = 10;
+
+interface SjcRow {
+  Id?: number;
+  TypeName?: string;
+  BuyValue?: number;
+  SellValue?: number;
+  BuyDifferValue?: number | null;
+}
+
+/** Đọc giá vàng SJC (theo lượng) → giá mỗi chỉ. Ưu tiên loại 1 chỉ, không có thì dùng miếng 1 lượng. */
+export function parseSjcGold(json: unknown): MetalQuote | null {
+  const rows = ((json as { data?: SjcRow[] })?.data ?? []).filter(
+    (r) => Number(r.BuyValue) > 0 && Number(r.SellValue) > 0,
+  );
+  const pick =
+    rows.find((r) => /^Vàng SJC/i.test(r.TypeName ?? "") && /\b1 chỉ/i.test(r.TypeName ?? "")) ??
+    rows.find((r) => r.Id === 1) ??
+    rows.find((r) => /^Vàng SJC/i.test(r.TypeName ?? ""));
+  if (!pick) return null;
+  const buy = Number(pick.BuyValue);
+  const sell = Number(pick.SellValue);
+  const diff = Number(pick.BuyDifferValue ?? 0);
+  const prev = buy - diff;
+  return {
+    bidVnd: buy / CHI_PER_LUONG,
+    askVnd: sell / CHI_PER_LUONG,
+    change24h: Number.isFinite(diff) && prev > 0 ? (diff / prev) * 100 : null,
+    source: "SJC",
+  };
+}
+
+/** Dự phòng khi trang SJC chặn: bảng giá PNJ có dòng "Vàng miếng SJC", đơn vị nghìn đồng / chỉ. */
+export function parsePnjSjc(json: unknown): MetalQuote | null {
+  const rows = (json as { data?: { masp?: string; giaban?: number; giamua?: number }[] })?.data ?? [];
+  const r = rows.find((x) => x.masp === "SJC");
+  const sell = Number(r?.giaban);
+  const buy = Number(r?.giamua);
+  if (!(sell > 0) || !(buy > 0)) return null;
+  return { bidVnd: buy * 1000, askVnd: sell * 1000, change24h: null, source: "SJC" };
+}
+
+const toNumber = (s: string) => Number(s.replace(/[^\d]/g, ""));
+
+/** Đọc bảng giá bạc Ancarat (HTML): cột BÁN RA trước, MUA VÀO sau, giá mỗi lượng. */
+export function parseAncaratSilver(html: string): MetalQuote | null {
+  const re =
+    /Ngân Long Quảng Tiến 999 - 1 lượng\s*<\/a>\s*<\/td>\s*<td[^>]*>\s*([\d.,]+)\s*<\/td>\s*<td[^>]*>\s*([\d.,]+)\s*<\/td>/i;
+  const m = html.match(re);
+  if (!m) return null;
+  const sell = toNumber(m[1] ?? "");
+  const buy = toNumber(m[2] ?? "");
+  if (!(sell > 0) || !(buy > 0)) return null;
+  return { bidVnd: buy, askVnd: sell, change24h: null, source: "Ancarat" };
+}
+
+/** Giờ cập nhật giá vàng/bạc mỗi ngày theo giờ Việt Nam (UTC+7). */
+export const METAL_UPDATE_HOURS_VN = [6, 22] as const;
+const VN_OFFSET_MS = 7 * 3_600_000;
+
 /**
- * Khung giờ chốt giá vàng/bạc gần nhất, dạng "2026-11-18-06" hoặc
- * "2026-11-18-22" (ngày + giờ theo Asia/Ho_Chi_Minh).
- * Trước 6h sáng thì khung là 22h hôm trước; từ 6h đến trước 22h là khung 6h.
+ * Mốc cập nhật gần nhất (≤ now): 06:00 hoặc 22:00 giờ Việt Nam.
+ * Giữa hai mốc, giá vàng/bạc giữ nguyên theo mốc này.
  */
-export function currentMetalsSlot(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  const year = Number(get("year"));
-  const month = Number(get("month"));
-  const day = Number(get("day"));
-  const hour = Number(get("hour"));
-  const slotHour = hour < 6 ? "22" : hour < 22 ? "06" : "22";
-  // Trước 6h sáng: khung 22h thuộc ngày hôm trước (theo lịch giờ VN).
-  const d = new Date(Date.UTC(year, month - 1, day));
-  if (hour < 6) d.setUTCDate(d.getUTCDate() - 1);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${slotHour}`;
-}
-
-/**
- * Từ giá last + % chênh lệch mua/bán của sàn → giá mua vào (bid, thấp hơn)
- * và giá bán ra (ask, cao hơn). Dùng cho bạc vì CoinGecko tickers chỉ cho
- * % spread, không cho sẵn giá bid/ask.
- */
-export function deriveBidAsk(last: number, spreadPct: number): { bid: number; ask: number } {
-  const half = spreadPct / 200;
-  return { bid: last * (1 - half), ask: last * (1 + half) };
-}
-
-const METALS_CACHE = "zth:metals";
-
-interface MetalsCache {
-  slot: string;
-  quotes: Partial<PriceMap>;
-}
-
-function readMetalsCache(): MetalsCache | null {
-  try {
-    const raw = localStorage.getItem(METALS_CACHE);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as MetalsCache;
-    return parsed && typeof parsed.slot === "string" && parsed.quotes ? parsed : null;
-  } catch {
-    return null;
+export function metalSlotAt(now: Date): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const y = vn.getUTCFullYear();
+  const m = vn.getUTCMonth();
+  const d = vn.getUTCDate();
+  const candidates: number[] = [];
+  for (const dayShift of [0, -1]) {
+    for (const h of METAL_UPDATE_HOURS_VN) {
+      candidates.push(Date.UTC(y, m, d + dayShift, h) - VN_OFFSET_MS);
+    }
   }
-}
-
-function writeMetalsCache(value: MetalsCache): void {
-  try {
-    localStorage.setItem(METALS_CACHE, JSON.stringify(value));
-  } catch {
-    // Bộ nhớ đầy/khóa: lần tải sau sẽ chốt lại khung mới, không chặn giá coin.
-  }
-}
-
-/**
- * Vàng/bạc chỉ chốt giá mới vào 2 khung 6h/22h: nếu vẫn trong khung cũ thì
- * giữ nguyên giá đã chốt (kể cả khi server vừa trả giá mới hơn); sang khung
- * mới thì lưu giá vừa tải làm giá chốt của khung đó. Các coin khác không đổi.
- */
-export function applyMetalsFreeze(res: PricesResult): PricesResult {
-  const slot = currentMetalsSlot();
-  const stored = readMetalsCache();
-  if (stored && stored.slot === slot) {
-    return { ...res, prices: { ...res.prices, ...stored.quotes } };
-  }
-  const quotes: Partial<PriceMap> = {};
-  for (const sym of [GOLD_SYMBOL, SILVER_SYMBOL]) {
-    const q = res.prices[sym];
-    if (q) quotes[sym] = q;
-  }
-  if (Object.keys(quotes).length > 0) writeMetalsCache({ slot, quotes });
-  return res;
+  const best = Math.max(...candidates.filter((t) => t <= now.getTime()));
+  return new Date(best);
 }

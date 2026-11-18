@@ -21,11 +21,9 @@ import { PriceChartDialog } from "@/components/app/price-chart-dialog";
 import { PnlText, Stat } from "@/components/app/stat";
 import { convertUsd, useCurrency, usePortfolio, useProfile } from "@/hooks/use-app-data";
 import { computeMonthlyStreak, groupByMonth, monthKeyOf, monthLabel } from "@/lib/accumulation";
-import { GOLD_SYMBOL } from "@/lib/prices.functions";
-import { isMetalSymbol } from "@/lib/metals";
 import type { PriceMap } from "@/lib/portfolio";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
-import { COINS, displaySymbol } from "@/lib/coins";
+import { COINS, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
 import { loadFavorites, saveFavorites, toggleFavorite } from "@/lib/favorites";
 import { scanLegacyData } from "@/lib/legacy-migration";
 import { cn } from "@/lib/utils";
@@ -79,11 +77,6 @@ function HomePage() {
   }, [txs.data]);
   const money = (usd: number | null, compact = false) =>
     formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency, { compact });
-  // Vàng/bạc luôn hiển thị bằng VND, các coin khác theo tiền tệ đã chọn.
-  const moneyFor = (symbol: string, usd: number | null, compact = false) =>
-    isMetalSymbol(symbol)
-      ? formatMoney(convertUsd(usd, "VND", usdVnd, usdKrw), "VND", { compact })
-      : money(usd, compact);
 
   const showLegacy = (legacy.data?.length ?? 0) > 0 && !profile?.local_migrated_at;
 
@@ -220,7 +213,25 @@ function HomePage() {
               Tài sản đang nắm giữ
             </h2>
             <ul className="mt-3 divide-y divide-border">
-              {holdings.map((h) => (
+              {holdings.map((h) => {
+                const unit = getCoin(h.symbol)?.unit;
+                // Vàng/bạc luôn hiển thị bằng VND (vốn VND chính xác nếu có).
+                const toVnd = (usd: number | null) => (usd != null && usdVnd ? usd * usdVnd : null);
+                const fmt = (v: number | null, compact = false) =>
+                  formatMoney(v, "VND", { compact });
+                const avg = unit ? fmt(h.avgCostVnd ?? toVnd(h.avgCostUsd)) : money(h.avgCostUsd);
+                const cur = unit
+                  ? fmt(prices.data?.prices[h.symbol]?.vnd ?? null)
+                  : h.priceUsd != null
+                    ? money(h.priceUsd)
+                    : null;
+                const value = unit ? fmt(h.valueVnd ?? toVnd(h.valueUsd)) : money(h.valueUsd ?? null);
+                const pnl = unit ? (h.pnlVnd ?? toVnd(h.pnlUsd)) : h.pnlUsd;
+                const pnlText =
+                  pnl == null
+                    ? "Chưa có giá"
+                    : `${pnl >= 0 ? "+" : ""}${unit ? fmt(pnl, true) : money(pnl, true)} (${formatPercent(h.pnlPct, 1, true)})`;
+                return (
                 <li key={h.symbol} className="flex items-center gap-3 px-5 py-3.5">
                   <CoinLogo symbol={h.symbol} size={36} />
                   <div className="min-w-0 flex-1">
@@ -230,28 +241,26 @@ function HomePage() {
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
-                        Avg {moneyFor(h.symbol, h.avgCostUsd)}
+                        Avg {avg}
+                        {unit ? ` / ${unit}` : ""}
                       </span>
-                      {h.priceUsd != null && (
-                        <span className="num text-xs text-muted-foreground">
-                          Hiện tại {moneyFor(h.symbol, h.priceUsd)}
-                        </span>
+                      {cur != null && cur !== "—" && (
+                        <span className="num text-xs text-muted-foreground">Hiện tại {cur}</span>
                       )}
                     </div>
                     <div className="num mt-1 text-xs text-muted-foreground">
-                      {formatNumber(h.quantity)} {displaySymbol(h.symbol)} · {h.purchases} lần mua
+                      {formatNumber(h.quantity)} {quantityUnit(h.symbol)} · {h.purchases} lần mua
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="num font-semibold">{moneyFor(h.symbol, h.valueUsd ?? null)}</div>
-                    <PnlText value={h.pnlUsd} className="text-xs">
-                      {h.pnlUsd != null
-                        ? `${h.pnlUsd >= 0 ? "+" : ""}${moneyFor(h.symbol, h.pnlUsd, true)} (${formatPercent(h.pnlPct, 1, true)})`
-                        : "Chưa có giá"}
+                    <div className="num font-semibold">{value}</div>
+                    <PnlText value={pnl} className="text-xs">
+                      {pnlText}
                     </PnlText>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         </div>
@@ -264,7 +273,7 @@ function HomePage() {
  * Bảng giá kiểu OKX: toàn bộ coin hỗ trợ, kéo cuộn để xem hết. Bấm ngôi sao
  * để ghim tối đa 3 coin yêu thích lên đầu (mặc định BTC, ETH, Vàng — lưu trên
  * thiết bị này). Bấm vào một coin để mở popup biểu đồ theo ngày / tháng / năm.
- * Vàng tính theo ounce (PAXG ≈ 1 ounce), Bạc theo KAG (CoinGecko).
+ * Vàng theo giá SJC mỗi chỉ, bạc theo giá Ancarat mỗi lượng (mua vào · bán ra).
  */
 function MarketPrices({
   prices,
@@ -333,11 +342,11 @@ function MarketPrices({
                       <div className="flex items-baseline gap-2">
                         <span className="font-semibold">{c.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          {c.symbol === GOLD_SYMBOL ? "PAXG" : displaySymbol(c.symbol)}
-                          {c.unit === "ounce" ? " · 1 ounce" : ""}
+                          {displaySymbol(c.symbol)}
+                          {c.unit ? ` · 1 ${c.unit}` : ""}
                         </span>
                       </div>
-                      {!isMetalSymbol(c.symbol) && (
+                      {!c.unit && (
                         <div className="num text-xs text-muted-foreground">
                           {q ? money(q.usd) : "Chưa có giá"}
                         </div>
@@ -375,26 +384,24 @@ function MarketPrices({
                     />
                   </span>
                   </div>
-                  {isMetalSymbol(c.symbol) && (
+                  {c.unit != null && (
                     <div className="num mt-2 whitespace-nowrap pl-[48px] text-[11px]">
-                      {q ? (
-                        q.bidVnd != null && q.askVnd != null ? (
-                          <>
-                            <span className="font-semibold text-gain">
-                              {formatNumber(q.bidVnd, 0)} vnđ
-                            </span>
-                            {" / "}
-                            <span className="font-semibold text-loss">
-                              {formatNumber(q.askVnd, 0)} vnđ
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">
+                      {!q ? (
+                        <span className="text-muted-foreground">Chưa có giá</span>
+                      ) : q.askVnd != null ? (
+                        <>
+                          <span className="font-semibold text-gain">
                             {formatNumber(q.vnd, 0)} vnđ
                           </span>
-                        )
+                          {" / "}
+                          <span className="font-semibold text-loss">
+                            {formatNumber(q.askVnd, 0)} vnđ
+                          </span>
+                        </>
                       ) : (
-                        <span className="text-muted-foreground">Chưa có giá</span>
+                        <span className="text-muted-foreground">
+                          {formatNumber(q.vnd, 0)} vnđ
+                        </span>
                       )}
                     </div>
                   )}
@@ -408,14 +415,11 @@ function MarketPrices({
         open={chartSymbol !== null}
         onOpenChange={(v) => !v && setChartSymbol(null)}
         symbol={chartSymbol}
-        money={(usd, compact) =>
-          chartSymbol && isMetalSymbol(chartSymbol)
-            ? formatMoney(convertUsd(usd, "VND", usdVnd, usdKrw), "VND", { compact })
-            : money(usd, compact)
-        }
-        currency={chartSymbol && isMetalSymbol(chartSymbol) ? "VND" : currency}
+        money={money}
+        currency={currency}
         usdVnd={usdVnd}
         usdKrw={usdKrw}
+        quote={chartSymbol ? prices?.[chartSymbol] : undefined}
       />
     </section>
   );

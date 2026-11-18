@@ -29,6 +29,13 @@
       "when": 1794979965191,
       "tag": "0003_pin_search_path_auto_confirm",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794984313992,
+      "tag": "0004_metal_prices_and_vnd_cost",
+      "breakpoints": true
     }
   ]
 }

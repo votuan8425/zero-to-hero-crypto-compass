@@ -8,6 +8,10 @@ export interface Tx {
   quantity: number;
   price_usd: number;
   fee_usd: number;
+  /** Giá mua chính xác bằng VND mỗi đơn vị (vàng/bạc luôn tính bằng VND). */
+  price_vnd?: number | null;
+  /** Phí chính xác bằng VND (vàng/bạc). */
+  fee_vnd?: number | null;
   tx_date: string;
   note: string | null;
   updated_at?: string;
@@ -19,9 +23,12 @@ export interface PriceQuote {
   vnd: number;
   krw: number;
   change24h: number | null;
-  /** Giá mua vào / bán ra (VND) — chỉ vàng/bạc, khi nguồn giá cho bid/ask. */
-  bidVnd?: number | null;
-  askVnd?: number | null;
+  /** Vàng/bạc: giá cửa hàng bán ra (VND mỗi chỉ / lượng); `vnd` là giá mua vào. */
+  askVnd?: number;
+  /** Vàng/bạc: nguồn giá (SJC, Ancarat). */
+  source?: string;
+  /** Vàng/bạc: mốc cập nhật giá (06:00 / 22:00 giờ Việt Nam), ISO. */
+  updatedAt?: string;
 }
 
 export type PriceMap = Record<string, PriceQuote>;
@@ -38,6 +45,12 @@ export interface Holding {
   pnlPct: number | null;
   change24h: number | null;
   purchases: number;
+  /** Vốn bằng VND, chỉ có khi mọi lần mua đều lưu giá VND (vàng/bạc). */
+  investedVnd: number | null;
+  avgCostVnd: number | null;
+  /** Giá trị theo giá VND hiện tại (vàng/bạc: giá mua vào). */
+  valueVnd: number | null;
+  pnlVnd: number | null;
 }
 
 /** Aggregates DCA purchases into holdings; values use live prices when available. */
@@ -59,25 +72,44 @@ export function computeHoldings(txs: Tx[], prices: PriceMap = {}): Holding[] {
       pnlPct: null,
       change24h: null,
       purchases: 0,
+      investedVnd: 0,
+      avgCostVnd: null,
+      valueVnd: null,
+      pnlVnd: null,
     };
     h.quantity += qty;
     h.investedUsd += cost;
+    const pv = t.price_vnd == null ? NaN : Number(t.price_vnd);
+    h.investedVnd =
+      h.investedVnd != null && Number.isFinite(pv)
+        ? h.investedVnd + qty * pv + Number(t.fee_vnd || 0)
+        : null;
     h.purchases += 1;
     map.set(symbol, h);
   }
   const out = [...map.values()].map((h) => {
     const q = prices[h.symbol];
     const avgCostUsd = h.quantity > 0 ? h.investedUsd / h.quantity : 0;
-    if (!q) return { ...h, avgCostUsd };
+    const avgCostVnd =
+      h.investedVnd != null && h.quantity > 0 ? h.investedVnd / h.quantity : null;
+    const valueVnd = q && q.vnd > 0 ? h.quantity * q.vnd : null;
+    const pnlVnd = valueVnd != null && h.investedVnd != null ? valueVnd - h.investedVnd : null;
+    const base = { ...h, avgCostUsd, avgCostVnd, valueVnd, pnlVnd };
+    if (!q || !(q.usd > 0)) return base;
     const valueUsd = h.quantity * q.usd;
     const pnlUsd = valueUsd - h.investedUsd;
     return {
-      ...h,
-      avgCostUsd,
+      ...base,
       priceUsd: q.usd,
       valueUsd,
       pnlUsd,
-      pnlPct: h.investedUsd > 0 ? (pnlUsd / h.investedUsd) * 100 : null,
+      // Có vốn VND chính xác (vàng/bạc) thì % lãi/lỗ tính theo VND.
+      pnlPct:
+        pnlVnd != null && h.investedVnd
+          ? (pnlVnd / h.investedVnd) * 100
+          : h.investedUsd > 0
+            ? (pnlUsd / h.investedUsd) * 100
+            : null,
       change24h: q.change24h,
     };
   });

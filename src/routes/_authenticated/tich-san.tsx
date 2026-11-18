@@ -45,8 +45,7 @@ import {
 } from "@/lib/accumulation";
 import type { Tx } from "@/lib/portfolio";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
-import { isMetalSymbol } from "@/lib/metals";
-import { displaySymbol } from "@/lib/coins";
+import { getCoin, quantityUnit } from "@/lib/coins";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/tich-san")({
@@ -121,12 +120,6 @@ function AccumulatePage() {
 
   const money = (usd: number | null) =>
     formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency);
-  // Giá của từng lần mua vàng/bạc luôn hiển thị bằng VND (tổng vốn chung thì
-  // vẫn theo tiền tệ đã chọn vì nó gộp nhiều loại tài sản).
-  const moneyFor = (symbol: string, usd: number | null) =>
-    isMetalSymbol(symbol)
-      ? formatMoney(convertUsd(usd, "VND", usdVnd, usdKrw), "VND")
-      : money(usd);
   const avg = list.length ? totals.investedUsd / list.length : null;
 
   async function confirmDelete() {
@@ -392,7 +385,7 @@ function AccumulatePage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="num font-semibold">
-                                +{formatNumber(t.quantity)} {displaySymbol(t.symbol)}
+                                +{formatNumber(t.quantity)} {quantityUnit(t.symbol)}
                               </span>
                               {pendingIds.has(t.id) && (
                                 <Badge
@@ -404,8 +397,26 @@ function AccumulatePage() {
                               )}
                             </div>
                             <div className="num whitespace-nowrap overflow-hidden text-xs text-muted-foreground">
-                              Giá {moneyFor(t.symbol, t.price_usd)} · Tổng{" "}
-                              {moneyFor(t.symbol, t.quantity * t.price_usd + t.fee_usd)}
+                              {getCoin(t.symbol)?.unit ? (
+                                // Vàng/bạc luôn hiển thị bằng VND (giá VND chính xác nếu có).
+                                <>
+                                  Giá {formatMoney(t.price_vnd ?? (usdVnd ? t.price_usd * usdVnd : null), "VND")}{" "}
+                                  · Tổng{" "}
+                                  {formatMoney(
+                                    t.price_vnd != null
+                                      ? t.quantity * t.price_vnd + (t.fee_vnd ?? 0)
+                                      : usdVnd
+                                        ? (t.quantity * t.price_usd + t.fee_usd) * usdVnd
+                                        : null,
+                                    "VND",
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  Giá {money(t.price_usd)} · Tổng{" "}
+                                  {money(t.quantity * t.price_usd + t.fee_usd)}
+                                </>
+                              )}
                               {t.note ? ` · ${t.note}` : ""}
                             </div>
                           </div>
@@ -454,7 +465,7 @@ function AccumulatePage() {
             <AlertDialogTitle>Xoá giao dịch này?</AlertDialogTitle>
             <AlertDialogDescription>
               {toDelete &&
-                `${formatNumber(toDelete.quantity)} ${displaySymbol(toDelete.symbol)} ngày ${formatDate(toDelete.tx_date)}. `}
+                `${formatNumber(toDelete.quantity)} ${quantityUnit(toDelete.symbol)} ngày ${formatDate(toDelete.tx_date)}. `}
               Thao tác này sẽ xoá trên mọi thiết bị và không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>

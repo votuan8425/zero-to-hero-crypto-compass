@@ -70,6 +70,8 @@ export async function restoreBackup(
       quantity: Number(t.quantity),
       price_usd: Number(t.price_usd),
       fee_usd: Number(t.fee_usd ?? 0),
+      price_vnd: t.price_vnd == null ? null : Number(t.price_vnd),
+      fee_vnd: t.fee_vnd == null ? null : Number(t.fee_vnd),
       tx_date: t.tx_date,
       note: t.note ?? null,
       import_key: `backup:${t.id}`,

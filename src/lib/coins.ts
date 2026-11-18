@@ -2,16 +2,20 @@ export interface CoinInfo {
   symbol: string;
   name: string;
   geckoId: string;
-  /** Đơn vị số lượng: kim loại quý tính theo ounce (1 PAXG ≈ 1 ounce vàng, 1 KAG ≈ 1 ounce bạc). */
-  unit?: "ounce";
+  /** Đơn vị số lượng của kim loại quý: vàng tính theo chỉ, bạc theo lượng. */
+  unit?: "chỉ" | "lượng";
+  /** Nguồn giá trong nước của kim loại quý (hiển thị thay cho mã). */
+  priceSource?: string;
+  /** Chữ hiện trong biểu tượng khi không có ảnh logo (VD: bạc → "Ag"). */
+  logoText?: string;
 }
 
 /** Popular coins supported for accumulation, with CoinGecko ids for live prices. */
 export const COINS: CoinInfo[] = [
   { symbol: "BTC", name: "Bitcoin", geckoId: "bitcoin" },
   { symbol: "ETH", name: "Ethereum", geckoId: "ethereum" },
-  { symbol: "PAXG", name: "Vàng", geckoId: "pax-gold", unit: "ounce" },
-  { symbol: "KAG", name: "Bạc", geckoId: "kinesis-silver", unit: "ounce" },
+  { symbol: "PAXG", name: "Vàng", geckoId: "pax-gold", unit: "chỉ", priceSource: "SJC" },
+  { symbol: "KAG", name: "Bạc", geckoId: "kinesis-silver", unit: "lượng", priceSource: "Ancarat", logoText: "Ag" },
   { symbol: "SOL", name: "Solana", geckoId: "solana" },
   { symbol: "BNB", name: "BNB", geckoId: "binancecoin" },
   { symbol: "XRP", name: "XRP", geckoId: "ripple" },
@@ -73,5 +77,11 @@ export function coinLogoUrl(symbol: string): string | null {
 
 export function displaySymbol(symbol: string): string {
   const s = normalizeSymbol(symbol);
-  return s === OTHER_SYMBOL ? "Khác" : s;
+  if (s === OTHER_SYMBOL) return "Khác";
+  return getCoin(s)?.priceSource ?? s;
+}
+
+/** Đơn vị hiển thị sau số lượng: "chỉ" (vàng), "lượng" (bạc), còn lại là mã coin. */
+export function quantityUnit(symbol: string): string {
+  return getCoin(symbol)?.unit ?? displaySymbol(symbol);
 }

@@ -80,6 +80,33 @@ export type Database = {
         }
         Relationships: []
       }
+      metal_prices: {
+        Row: {
+          ask_vnd: number
+          bid_vnd: number
+          fetched_at: string
+          slot_at: string
+          source: string
+          symbol: string
+        }
+        Insert: {
+          ask_vnd: number
+          bid_vnd: number
+          fetched_at?: string
+          slot_at: string
+          source: string
+          symbol: string
+        }
+        Update: {
+          ask_vnd?: number
+          bid_vnd?: number
+          fetched_at?: string
+          slot_at?: string
+          source?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -160,10 +187,12 @@ export type Database = {
           coin_name: string
           created_at: string
           fee_usd: number
+          fee_vnd: number | null
           id: string
           import_key: string | null
           note: string | null
           price_usd: number
+          price_vnd: number | null
           quantity: number
           symbol: string
           tx_date: string
@@ -174,10 +203,12 @@ export type Database = {
           coin_name: string
           created_at?: string
           fee_usd?: number
+          fee_vnd?: number | null
           id?: string
           import_key?: string | null
           note?: string | null
           price_usd: number
+          price_vnd?: number | null
           quantity: number
           symbol: string
           tx_date?: string
@@ -188,10 +219,12 @@ export type Database = {
           coin_name?: string
           created_at?: string
           fee_usd?: number
+          fee_vnd?: number | null
           id?: string
           import_key?: string | null
           note?: string | null
           price_usd?: number
+          price_vnd?: number | null
           quantity?: number
           symbol?: string
           tx_date?: string

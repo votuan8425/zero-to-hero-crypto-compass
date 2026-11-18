@@ -1,10 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { COINS } from "./coins";
-import { deriveBidAsk, GOLD_SYMBOL, SILVER_SYMBOL } from "./metals";
 import type { PriceMap } from "./portfolio";
-
-// Ký hiệu vàng/bạc giữ nguyên đường import cũ cho các file khác dùng.
-export { GOLD_SYMBOL, SILVER_SYMBOL } from "./metals";
 
 export interface PricesResult {
   prices: PriceMap;
@@ -42,17 +38,27 @@ async function fxRates(): Promise<{ vnd: number | null; krw: number | null }> {
   }
 }
 
-/** Spot prices from OKX (USDT pairs ≈ USD). Vàng kèm bid/ask thật từ sổ lệnh. */
-async function okxPrices(): Promise<
-  Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }>
-> {
-  const j = await fetchJson<{
-    data?: { instId: string; last: string; open24h: string; bidPx?: string; askPx?: string }[]
-  }>("https://www.okx.com/api/v5/market/tickers?instType=SPOT");
+/**
+ * Vàng: giữ mã nội bộ PAXG để không ảnh hưởng dữ liệu đã lưu, nhưng giá lấy
+ * theo vàng SJC (VND mỗi chỉ) và số lượng tính theo chỉ.
+ */
+export const GOLD_SYMBOL = "PAXG";
+
+/**
+ * Bạc: giữ mã nội bộ KAG, giá lấy theo bạc Ancarat (VND mỗi lượng) và số
+ * lượng tính theo lượng.
+ */
+export const SILVER_SYMBOL = "KAG";
+
+/** Spot prices from OKX (USDT pairs ≈ USD). */
+async function okxPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
+  const j = await fetchJson<{ data?: { instId: string; last: string; open24h: string }[] }>(
+    "https://www.okx.com/api/v5/market/tickers?instType=SPOT",
+  );
   const bySymbol = new Map((j.data ?? []).map((t) => [t.instId, t]));
-  const out: Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }> =
-    {};
+  const out: Record<string, { usd: number; change24h: number | null }> = {};
   for (const c of COINS) {
+    if (c.unit) continue; // Vàng/bạc lấy giá trong nước (SJC / Ancarat), không theo OKX.
     if (c.symbol === "USDT") {
       out[c.symbol] = { usd: 1, change24h: 0 };
       continue;
@@ -61,79 +67,13 @@ async function okxPrices(): Promise<
     const last = t ? Number(t.last) : NaN;
     const open = t ? Number(t.open24h) : NaN;
     if (Number.isFinite(last) && last > 0) {
-      const bid = t ? Number(t.bidPx) : NaN;
-      const ask = t ? Number(t.askPx) : NaN;
       out[c.symbol] = {
         usd: last,
         change24h: Number.isFinite(open) && open > 0 ? ((last - open) / open) * 100 : null,
-        // Chỉ vàng cần giá mua/bán; bid/ask của các coin khác không dùng tới.
-        ...(c.symbol === GOLD_SYMBOL && Number.isFinite(bid) && bid > 0 ? { bid } : {}),
-        ...(c.symbol === GOLD_SYMBOL && Number.isFinite(ask) && ask > 0 ? { ask } : {}),
       };
     }
   }
-  // Vàng (PAXG-USDT) lấy từ cùng bảng giá OKX qua vòng lặp COINS ở trên.
   return out;
-}
-
-/** Fallback riêng cho vàng khi OKX không trả PAXG: CoinGecko pax-gold, không cần key. */
-async function paxgGeckoPrice(): Promise<{ usd: number; change24h: number | null } | null> {
-  try {
-    const j = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(
-      "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd&include_24hr_change=true",
-    );
-    const p = j["pax-gold"];
-    if (p?.usd != null) return { usd: p.usd, change24h: p.usd_24h_change ?? null };
-  } catch (e) {
-    console.error("paxg coingecko failed", e);
-  }
-  return null;
-}
-
-/**
- * Giá bạc khi OKX không có cặp bạc: CoinGecko kinesis-silver, không cần key.
- * Lưu ý: simple/price trả về {} cho coin này (đã kiểm chứng 17/11/2026),
- * nên dùng market_chart 1 ngày và lấy điểm cuối làm giá hiện tại.
- */
-async function kagGeckoPrice(): Promise<{ usd: number; change24h: number | null } | null> {
-  try {
-    const j = await fetchJson<{ prices?: [number, number][] }>(
-      "https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=1",
-    );
-    const rows = (j.prices ?? []).filter(([, c]) => Number.isFinite(c) && c > 0);
-    if (rows.length < 2) return null;
-    const first = rows[0]?.[1] ?? 0;
-    const last = rows[rows.length - 1]?.[1] ?? 0;
-    if (!(last > 0) || !(first > 0)) return null;
-    return { usd: last, change24h: ((last - first) / first) * 100 };
-  } catch (e) {
-    console.error("kag coingecko failed", e);
-  }
-  return null;
-}
-
-/**
- * % chênh lệch mua/bán của bạc từ CoinGecko tickers — endpoint này không cho
- * sẵn giá bid/ask, chỉ cho spread % (đã kiểm chứng 2026-11-18: ticker
- * KAG/C1USD của Kinesis Money trả spread, ví dụ 0,113676%).
- * Dùng kèm giá last từ market_chart để suy ra bid/ask (xem deriveBidAsk).
- */
-async function kagSpreadPct(): Promise<number | null> {
-  try {
-    const j = await fetchJson<{
-      tickers?: { target?: string; bid_ask_spread_percentage?: number }[];
-    }>("https://api.coingecko.com/api/v3/coins/kinesis-silver/tickers");
-    const tickers = j.tickers ?? [];
-    const t =
-      tickers.find((x) => x.target === "C1USD") ??
-      tickers.find((x) => x.target === "USD" || x.target === "USDT" || x.target === "USDC") ??
-      tickers[0];
-    const s = t?.bid_ask_spread_percentage;
-    return typeof s === "number" && Number.isFinite(s) && s >= 0 ? s : null;
-  } catch (e) {
-    console.error("kag tickers failed", e);
-    return null;
-  }
 }
 
 async function geckoPrices(): Promise<Record<string, { usd: number; change24h: number | null }>> {
@@ -153,8 +93,14 @@ async function geckoPrices(): Promise<Record<string, { usd: number; change24h: n
 export const getPrices = createServerFn({ method: "GET" }).handler(
   async (): Promise<PricesResult> => {
     const ratePromise = fxRates();
-    let usd: Record<string, { usd: number; change24h: number | null; bid?: number; ask?: number }> =
-      {};
+    // Vàng/bạc: giá theo mốc 06:00 / 22:00 giờ Việt Nam đã lưu trên máy chủ.
+    const metalsPromise = import("./metal-prices.server")
+      .then((m) => m.getMetalSnapshots())
+      .catch((e: unknown) => {
+        console.error("metal snapshots failed", e);
+        return {} as Record<string, never>;
+      });
+    let usd: Record<string, { usd: number; change24h: number | null }> = {};
     try {
       usd = await okxPrices();
     } catch (e) {
@@ -163,9 +109,9 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
     // Bổ sung coin nào OKX không niêm yết (VD: TON không có trong bảng
     // tickers SPOT của OKX — đã kiểm chứng) từ CoinGecko; OKX vẫn là nguồn
     // chính cho các coin đã có giá. Bạc (KAG) không dùng simple/price được
-    // nên vẫn lấy riêng bằng market_chart ở dưới.
+    // Vàng/bạc không lấy ở đây mà theo giá trong nước bên dưới.
     const missing = COINS.filter(
-      (c) => c.symbol !== "USDT" && c.symbol !== SILVER_SYMBOL && !usd[c.symbol],
+      (c) => c.symbol !== "USDT" && !c.unit && !usd[c.symbol],
     );
     if (missing.length > 0) {
       try {
@@ -178,20 +124,6 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
         console.error("coingecko prices failed", e);
       }
     }
-    // Vàng: nếu OKX không trả PAXG thì thử CoinGecko, vẫn không có thì để trống.
-    if (!usd[GOLD_SYMBOL]) {
-      const paxg = await paxgGeckoPrice();
-      if (paxg) usd[GOLD_SYMBOL] = paxg;
-    }
-    // Bạc: OKX không có cặp bạc nên luôn lấy từ CoinGecko nếu chưa có giá.
-    // Kèm % spread từ tickers để suy ra giá mua/bán (không bịa spread).
-    if (!usd[SILVER_SYMBOL]) {
-      const [kag, spread] = await Promise.all([kagGeckoPrice(), kagSpreadPct()]);
-      if (kag) {
-        usd[SILVER_SYMBOL] =
-          spread != null ? { ...kag, ...deriveBidAsk(kag.usd, spread) } : kag;
-      }
-    }
     const fx = await ratePromise;
     const usdVnd = fx.vnd;
     const usdKrw = fx.krw;
@@ -202,9 +134,21 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
         vnd: usdVnd ? q.usd * usdVnd : 0,
         krw: usdKrw ? q.usd * usdKrw : 0,
         change24h: q.change24h,
-        // Giá mua/bán vàng/bạc luôn quy ra VND ngay từ lúc tải.
-        ...(q.bid != null && usdVnd ? { bidVnd: q.bid * usdVnd } : {}),
-        ...(q.ask != null && usdVnd ? { askVnd: q.ask * usdVnd } : {}),
+      };
+    }
+    // Vàng (mỗi chỉ, SJC) và bạc (mỗi lượng, Ancarat): luôn tính bằng VND,
+    // định giá theo giá mua vào; giá bán ra ở askVnd để điền khi ghi lần mua.
+    const metals = await metalsPromise;
+    for (const [sym, m] of Object.entries(metals)) {
+      const usdBid = usdVnd ? m.bidVnd / usdVnd : 0;
+      prices[sym] = {
+        usd: usdBid,
+        vnd: m.bidVnd,
+        krw: usdKrw && usdBid ? usdBid * usdKrw : 0,
+        change24h: m.change24h,
+        askVnd: m.askVnd,
+        source: m.source,
+        updatedAt: m.slotAt,
       };
     }
     const error =

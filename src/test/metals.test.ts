@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COINS, coinName, getCoin } from "@/lib/coins";
+import { COINS, coinName, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
+import { metalSlotAt, parseAncaratSilver, parsePnjSjc, parseSjcGold } from "@/lib/metals";
 import { GOLD_SYMBOL, SILVER_SYMBOL } from "@/lib/prices.functions";
 import { computeAllocation, computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
 
@@ -36,10 +37,18 @@ describe("vàng và bạc trong danh sách mua", () => {
     expect(getCoin(SILVER_SYMBOL)?.geckoId).toBe("kinesis-silver");
   });
 
-  it("số lượng kim loại quý tính theo ounce", () => {
-    expect(getCoin("PAXG")?.unit).toBe("ounce");
-    expect(getCoin("KAG")?.unit).toBe("ounce");
+  it("vàng mua theo chỉ, bạc mua theo lượng", () => {
+    expect(getCoin("PAXG")?.unit).toBe("chỉ");
+    expect(getCoin("KAG")?.unit).toBe("lượng");
     expect(getCoin("BTC")?.unit).toBeUndefined();
+    expect(quantityUnit("PAXG")).toBe("chỉ");
+    expect(quantityUnit("KAG")).toBe("lượng");
+    expect(quantityUnit("BTC")).toBe("BTC");
+  });
+
+  it("vàng hiển thị nguồn SJC, bạc hiển thị nguồn Ancarat", () => {
+    expect(displaySymbol("PAXG")).toBe("SJC");
+    expect(displaySymbol("KAG")).toBe("Ancarat");
   });
 });
 
@@ -90,5 +99,108 @@ describe("giá trị danh mục của vàng và bạc", () => {
     const { slices } = computeAllocation(holdings);
     expect(slices.map((s) => s.symbol).sort()).toEqual(["KAG", "PAXG"]);
     expect(slices.reduce((s, x) => s + x.percent, 0)).toBeCloseTo(100, 6);
+  });
+});
+
+describe("giá vàng SJC và bạc Ancarat", () => {
+  const sjc = {
+    success: true,
+    data: [
+      { Id: 1, TypeName: "Vàng SJC 1L, 10L, 1KG", BuyValue: 134200000, SellValue: 137200000, BuyDifferValue: 0 },
+      { Id: 33, TypeName: "Vàng SJC 0.5 chỉ, 1 chỉ, 2 chỉ", BuyValue: 134200000, SellValue: 137230000, BuyDifferValue: 0 },
+      { Id: 49, TypeName: "Vàng nhẫn SJC 99,99% 1 chỉ, 2 chỉ, 5 chỉ", BuyValue: 133000000, SellValue: 137000000, BuyDifferValue: 0 },
+    ],
+  };
+
+  it("vàng SJC: lấy loại 1 chỉ, đổi giá mỗi lượng thành giá mỗi chỉ (chia 10)", () => {
+    const q = parseSjcGold(sjc);
+    expect(q?.bidVnd).toBe(13420000);
+    expect(q?.askVnd).toBe(13723000);
+    expect(q?.source).toBe("SJC");
+  });
+
+  it("vàng SJC: không có loại 1 chỉ thì dùng miếng 1 lượng", () => {
+    const q = parseSjcGold({ data: [sjc.data[0], sjc.data[2]] });
+    expect(q?.askVnd).toBe(13720000);
+  });
+
+  it("dự phòng PNJ: dòng vàng miếng SJC tính nghìn đồng mỗi chỉ", () => {
+    const q = parsePnjSjc({ data: [{ masp: "SJC", giaban: 13720, giamua: 13420 }] });
+    expect(q?.askVnd).toBe(13720000);
+    expect(q?.bidVnd).toBe(13420000);
+  });
+
+  it("bạc Ancarat: bán ra trước, mua vào sau, giá mỗi lượng", () => {
+    const html =
+      '<td><a href="x">Ngân Long Quảng Tiến 999 - 1 lượng</a></td><td class="a">1,598,000</td><td class="b">1,545,000</td>';
+    const q = parseAncaratSilver(html);
+    expect(q?.askVnd).toBe(1598000);
+    expect(q?.bidVnd).toBe(1545000);
+    expect(q?.source).toBe("Ancarat");
+  });
+
+  it("không đọc được thì không bịa giá", () => {
+    expect(parseSjcGold({ data: [] })).toBeNull();
+    expect(parseAncaratSilver("<html></html>")).toBeNull();
+    expect(parsePnjSjc({ data: [] })).toBeNull();
+  });
+});
+
+describe("giá vàng bạc chỉ cập nhật lúc 6:00 và 22:00 giờ Việt Nam", () => {
+  // Giờ Việt Nam = UTC+7: 06:00 VN = 23:00 UTC hôm trước, 22:00 VN = 15:00 UTC.
+  it("13:44 giờ VN vẫn dùng giá mốc 06:00 sáng cùng ngày", () => {
+    const slot = metalSlotAt(new Date("2026-11-18T06:44:00Z"));
+    expect(slot.toISOString()).toBe("2026-11-17T23:00:00.000Z");
+  });
+
+  it("đúng 22:00 giờ VN chuyển sang mốc 22:00", () => {
+    expect(metalSlotAt(new Date("2026-11-18T15:00:00Z")).toISOString()).toBe(
+      "2026-11-18T15:00:00.000Z",
+    );
+  });
+
+  it("21:59 giờ VN vẫn là mốc 06:00", () => {
+    expect(metalSlotAt(new Date("2026-11-18T14:59:00Z")).toISOString()).toBe(
+      "2026-11-17T23:00:00.000Z",
+    );
+  });
+
+  it("03:00 sáng giờ VN dùng mốc 22:00 tối hôm trước", () => {
+    // 03:00 VN ngày 19 = 20:00 UTC ngày 18.
+    expect(metalSlotAt(new Date("2026-11-18T20:00:00Z")).toISOString()).toBe(
+      "2026-11-18T15:00:00.000Z",
+    );
+  });
+});
+
+describe("vàng bạc luôn tính bằng VND", () => {
+  it("vốn và lãi/lỗ VND không đổi theo tỷ giá", () => {
+    const holdings = computeHoldings(
+      [
+        tx({
+          symbol: "PAXG",
+          coin_name: "Vàng",
+          quantity: 2,
+          price_usd: 520,
+          price_vnd: 13_723_000,
+          fee_vnd: 0,
+        }),
+      ],
+      { PAXG: { usd: 510, vnd: 13_420_000, krw: 0, change24h: null, askVnd: 13_723_000 } },
+    );
+    const g = holdings[0];
+    expect(g?.investedVnd).toBe(27_446_000);
+    expect(g?.avgCostVnd).toBe(13_723_000);
+    expect(g?.valueVnd).toBe(26_840_000);
+    expect(g?.pnlVnd).toBe(-606_000);
+  });
+
+  it("lần mua cũ không có giá VND thì không bịa vốn VND", () => {
+    const holdings = computeHoldings(
+      [tx({ symbol: "KAG", coin_name: "Bạc", quantity: 1, price_usd: 60 })],
+      { KAG: { usd: 59, vnd: 1_545_000, krw: 0, change24h: null } },
+    );
+    expect(holdings[0]?.investedVnd).toBeNull();
+    expect(holdings[0]?.valueVnd).toBe(1_545_000);
   });
 });

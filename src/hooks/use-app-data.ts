@@ -2,13 +2,13 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getPrices, type PricesResult } from "@/lib/prices.functions";
 import { fetchPricesFromBrowser } from "@/lib/market-client";
-import { applyMetalsFreeze } from "@/lib/metals";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { computeAllocation, computeHoldings, computeTotals } from "@/lib/portfolio";
 import { normalizeCurrency, type Currency } from "@/lib/format";
 import { useUser } from "./use-user";
 
-const PRICE_CACHE = "zth:prices";
+/** v2: vàng/bạc đổi sang giá SJC (chỉ) / Ancarat (lượng) — bỏ giá ounce cũ đã lưu. */
+const PRICE_CACHE = "zth:prices:v2";
 
 function readPriceCache(): PricesResult | null {
   try {
@@ -48,14 +48,13 @@ export const pricesQuery = queryOptions({
     if (res.error) {
       try {
         const direct = await fetchPricesFromBrowser();
-        if (!direct.error) res = direct;
+        // Giữ giá vàng/bạc server đã lấy được (trình duyệt không lấy được SJC/Ancarat).
+        if (!direct.error) res = { ...direct, prices: { ...res.prices, ...direct.prices } };
       } catch {
         // Giữ nguyên lỗi của server, rơi xuống giá lưu ở dưới.
       }
       return cached ? stale(cached) : res;
     }
-    // Vàng/bạc: chốt giá theo khung 6h/22h trước khi ghi cache dùng chung.
-    res = applyMetalsFreeze(res);
     localStorage.setItem(
       PRICE_CACHE,
       JSON.stringify({
