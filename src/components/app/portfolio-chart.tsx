@@ -176,7 +176,7 @@ export function PortfolioChart({
               d={geom.line}
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.5"
+              strokeWidth="3.5"
               strokeLinejoin="round"
               strokeLinecap="round"
               style={{
