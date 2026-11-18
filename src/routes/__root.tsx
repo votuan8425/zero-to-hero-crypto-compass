@@ -17,6 +17,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { isNetworkError, profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { fetchPublishedAllocations, publishedAllocationsKey } from "@/lib/admin-allocation";
 import { pricesQuery } from "@/hooks/use-app-data";
+import { computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
+import type { PricesResult } from "@/lib/prices.functions";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import appCss from "../styles.css?url";
@@ -160,11 +162,15 @@ function RootComponent() {
   // thị trường, danh mục tham khảo, nhà đầu tư đã đăng + JS chunk của 4 tab) —
   // vào app rồi thì Trang chủ có sẵn dữ liệu, chuyển tab nào (Tích sản, Cá nhân,
   // Tham khảo) cũng có sẵn cả code lẫn dữ liệu, không phải chờ tải lần đầu.
-  // Chưa lấy xong thì ở ngoài màn hình chờ; chờ tối đa 15 giây để không kẹt mãi
-  // khi mạng yếu (quá 15s thì vẫn vào app với dữ liệu đã có / đã lưu, phần còn
-  // thiếu tự tải nốt trong nền). Chỉ chạy khi tải lại trang / mở app (component
-  // này chỉ mount một lần), không hiện lại khi chuyển tab.
+  // Riêng TỔNG GIÁ TRỊ ƯỚC TÍNH: chỉ cho vào app khi đã tính được từ data giá
+  // thật vừa nạp (token BTC/ETH… từ OKX/CoinGecko + vàng/bạc SJC/Ancarat);
+  // chưa tính được thì ở ngoài màn hình chờ xoay xoay, tải lại giá và chờ thêm.
+  // Chờ tối đa 15 giây để không kẹt mãi khi mạng yếu (quá 15s thì vẫn vào app
+  // với dữ liệu đã có / đã lưu, phần còn thiếu tự tải nốt trong nền). Chỉ chạy
+  // khi tải lại trang / mở app (component này chỉ mount một lần), không hiện
+  // lại khi chuyển tab.
   const [booted, setBooted] = useState(false);
+  const [bootStatus, setBootStatus] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -186,6 +192,9 @@ function RootComponent() {
   useEffect(() => {
     let cancelled = false;
     const boot = async () => {
+      const bootStart = Date.now();
+      const BUDGET_MS = 15000;
+      const remaining = () => BUDGET_MS - (Date.now() - bootStart);
       const minWait = sleep(2000);
       try {
         let userId: string | null = null;
@@ -220,8 +229,35 @@ function RootComponent() {
               router.preloadRoute({ to: "/ca-nhan" }),
               router.preloadRoute({ to: "/tham-khao" }),
             ]),
-            sleep(15000),
+            sleep(BUDGET_MS),
           ]);
+          // Tính giá trị ước tính từ data vừa nạp (token OKX/CoinGecko +
+          // vàng/bạc SJC/Ancarat + giao dịch); chỉ vào app khi ước tính đã
+          // tính được từ giá thật — chưa có giao dịch nào thì ước tính = 0,
+          // cũng coi là tính được. Chưa tính được (thiếu giá một đồng nào đó)
+          // thì tải lại giá và chờ thêm trong thời gian còn lại của 15s.
+          if (!cancelled && remaining() > 0) {
+            setBootStatus("Đang tính giá trị ước tính…");
+            for (;;) {
+              const txs =
+                queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
+              const pricesData =
+                queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
+              const holdings = computeHoldings(txs, pricesData?.prices ?? {});
+              const value = computeTotals(holdings).valueUsd;
+              if (holdings.length === 0 || value != null || cancelled || remaining() <= 0) {
+                break;
+              }
+              // type: "all" vì lúc boot chưa có component nào observe query
+              // giá (inactive) nên refetch mặc định sẽ bỏ qua nó.
+              await queryClient.refetchQueries({
+                queryKey: pricesQuery.queryKey,
+                type: "all",
+              });
+              if (cancelled || remaining() <= 0) break;
+              await sleep(Math.min(1000, remaining()));
+            }
+          }
         }
       } catch {
         // Lỗi lúc tải dữ liệu thì vẫn vào app sau 2 giây.
@@ -240,7 +276,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        {booted ? <Outlet /> : <SplashScreen />}
+        {booted ? <Outlet /> : <SplashScreen status={bootStatus} />}
         <Toaster position="top-center" richColors theme="dark" />
       </TooltipProvider>
     </QueryClientProvider>
