@@ -147,7 +147,8 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
       try {
         const g = await geckoPrices();
         for (const c of missing) {
-          if (g[c.symbol]) usd[c.symbol] = g[c.symbol];
+          const q = g[c.symbol];
+          if (q) usd[c.symbol] = q;
         }
       } catch (e) {
         console.error("coingecko prices failed", e);

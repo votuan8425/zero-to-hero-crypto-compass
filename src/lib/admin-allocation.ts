@@ -10,15 +10,16 @@
  * (both percentages/dates — never money amounts).
  */
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import type { AllocationSlice } from "./portfolio";
 import { isAdminUser } from "./admin";
 import type { User } from "@supabase/supabase-js";
 
-export interface AdminAllocationSlice {
+export type AdminAllocationSlice = {
   symbol: string;
   name: string;
   percent: number;
-}
+};
 
 /** Số liệu công khai kèm theo portfolio đã đăng — chỉ % và thời gian, không số tiền. */
 export interface AdminAllocationStats {
@@ -79,7 +80,7 @@ export function selectPublishedAllocation(
   const followed = followedId
     ? investors.find((a) => a.user_id === followedId)
     : undefined;
-  return followed ?? investors[0];
+  return followed ?? investors[0] ?? null;
 }
 
 /**
@@ -156,7 +157,7 @@ function parseRow(row: AdminAllocationRow): AdminAllocation {
     updated_at: row.updated_at,
     startedAt: row.started_at ?? null,
     pnlPct: Number.isFinite(pnl) ? pnl : null,
-    message: message ? row.message : null,
+    message: message ? (row.message ?? null) : null,
     messageUpdatedAt: row.message_updated_at ?? null,
   };
 }
@@ -291,8 +292,9 @@ export async function syncAdminAllocation(
   if (!isAdminUser(user)) return "skipped";
   const slices = buildAdminAllocationSlices(allocation.slices);
   if (slices.length === 0) return "skipped";
+  const trimmedMessage = message?.trim() ?? "";
   const normalizedMessage =
-    message === undefined ? undefined : message.trim() ? message.trim() : null;
+    message === undefined ? undefined : trimmedMessage ? trimmedMessage : null;
   const existing = await fetchAdminAllocation();
   if (
     existing &&
@@ -303,7 +305,7 @@ export async function syncAdminAllocation(
   ) {
     return "unchanged";
   }
-  const payload: Record<string, unknown> = {
+  const payload: TablesInsert<"admin_allocations"> = {
     user_id: user.id,
     slices,
     started_at: stats.startedAt,
@@ -324,7 +326,7 @@ export async function syncAdminAllocation(
       );
     }
     // Cột stats chưa có: ghi lại chỉ với slices (+ lời nhắn nếu có).
-    const retry: Record<string, unknown> = { user_id: user.id, slices };
+    const retry: TablesInsert<"admin_allocations"> = { user_id: user.id, slices };
     if (normalizedMessage !== undefined) {
       retry.message = normalizedMessage;
       retry.message_updated_at = new Date().toISOString();

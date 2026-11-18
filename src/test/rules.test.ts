@@ -46,7 +46,7 @@ describe("portfolio math", () => {
 
   it("computes profit/loss from live price", () => {
     const holdings = computeHoldings([tx({ quantity: 2, price_usd: 100 })], {
-      BTC: { usd: 150, vnd: 0, change24h: null },
+      BTC: { usd: 150, vnd: 0, krw: 0, change24h: null },
     });
     const totals = computeTotals(holdings);
     expect(totals.valueUsd).toBe(300);
