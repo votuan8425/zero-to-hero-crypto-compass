@@ -137,9 +137,15 @@ function HomePage() {
         <div className="flex items-start gap-3 sm:gap-4">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Tổng giá trị ước tính
+              {/* "Ước tính" chỉ cho vào khi tổng đã tính được từ data giá thật;
+                  chưa có data thì ở ngoài phần giới thiệu (đang tải), không
+                  ghi ước tính cho một con số chưa tồn tại. */}
+              {holdings.length > 0 && totals.valueUsd == null
+                ? "Tổng giá trị"
+                : "Tổng giá trị ước tính"}
             </div>
-            {txs.isLoading ? (
+            {txs.isLoading ||
+            (holdings.length > 0 && totals.valueUsd == null && prices.isLoading) ? (
               <Skeleton className="mt-3 h-10 w-56" />
             ) : (
               <div
@@ -159,28 +165,33 @@ function HomePage() {
                       : "—"}
               </div>
             )}
+            {/* Khối PNL luôn đúng 3 dòng (nhãn / giá trị / đã mua thêm) ở mọi
+                kỳ — dòng trống giữ chỗ khi không có, để chiều cao hero không
+                đổi khi đổi kỳ và trang dưới không bị giật. */}
             <div className="mt-2 text-sm">
+              <div className="text-muted-foreground">
+                PNL trong {historyPeriodLabel(period)}
+              </div>
               {history && history.points.length > 0 ? (
-                <>
-                  <div className="text-muted-foreground">
-                    PNL trong {historyPeriodLabel(period)}
-                  </div>
-                  <PnlText
-                    value={history.pnl}
-                    className="block whitespace-nowrap text-[13px] font-semibold sm:text-sm"
-                  >
-                    {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
-                  </PnlText>
-                  {history.deposits > 0 && (
-                    <div className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
-                      Đã mua thêm {money(history.deposits)}
-                    </div>
-                  )}
-                </>
+                <PnlText
+                  value={history.pnl}
+                  className="block whitespace-nowrap text-[13px] font-semibold sm:text-sm"
+                >
+                  {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
+                </PnlText>
               ) : (
-                <span className="text-muted-foreground">
-                  PNL trong {historyPeriodLabel(period)} —
+                <span className="block text-[13px] font-semibold text-muted-foreground sm:text-sm">
+                  —
                 </span>
+              )}
+              {history && history.deposits > 0 ? (
+                <div className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
+                  Đã mua thêm {money(history.deposits)}
+                </div>
+              ) : (
+                <div className="mt-0.5 text-xs invisible" aria-hidden="true">
+                  Đã mua thêm
+                </div>
               )}
             </div>
           </div>
