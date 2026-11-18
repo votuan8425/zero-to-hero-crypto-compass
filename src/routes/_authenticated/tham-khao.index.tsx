@@ -107,7 +107,7 @@ function InvestorPortfolioCard({
             </span>
           </div>
         </div>
-        {pnl != null && (
+        {canView && pnl != null && (
           <PnlText value={pnl} className="num shrink-0 text-base font-bold">
             {pnl >= 0 ? "+" : ""}
             {formatNumber(pnl, 1)}%
