@@ -157,17 +157,18 @@ function HomePage() {
             <div className="mt-2 text-sm">
               {history && history.points.length > 0 ? (
                 <>
-                  <div>
-                    <span className="text-muted-foreground">
-                      PNL trong {historyPeriodLabel(period)}{" "}
-                    </span>
-                    <PnlText value={history.pnl} className="font-semibold">
-                      {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
-                    </PnlText>
+                  <div className="text-muted-foreground">
+                    PNL trong {historyPeriodLabel(period)}
                   </div>
+                  <PnlText
+                    value={history.pnl}
+                    className="block whitespace-nowrap text-[13px] font-semibold sm:text-sm"
+                  >
+                    {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
+                  </PnlText>
                   {history.deposits > 0 && (
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      Đã mua thêm {money(history.deposits)} trong {historyPeriodLabel(period)}
+                    <div className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
+                      Đã mua thêm {money(history.deposits)}
                     </div>
                   )}
                 </>
