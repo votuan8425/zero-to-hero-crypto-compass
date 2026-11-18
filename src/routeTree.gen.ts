@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedCaNhanRouteImport } from './routes/_authenticated/ca-nhan'
+import { Route as AuthenticatedQuanTriRouteImport } from './routes/_authenticated/quan-tri'
 import { Route as AuthenticatedTichSanRouteImport } from './routes/_authenticated/tich-san'
 import { Route as AuthenticatedTrangChuRouteImport } from './routes/_authenticated/trang-chu'
 import { Route as AuthenticatedThamKhaoIndexRouteImport } from './routes/_authenticated/tham-khao.index'
@@ -45,6 +46,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const AuthenticatedCaNhanRoute = AuthenticatedCaNhanRouteImport.update({
   id: '/ca-nhan',
   path: '/ca-nhan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedQuanTriRoute = AuthenticatedQuanTriRouteImport.update({
+  id: '/quan-tri',
+  path: '/quan-tri',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedTichSanRoute = AuthenticatedTichSanRouteImport.update({
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
+  '/quan-tri': typeof AuthenticatedQuanTriRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
   '/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ca-nhan': typeof AuthenticatedCaNhanRoute
+  '/quan-tri': typeof AuthenticatedQuanTriRoute
   '/tich-san': typeof AuthenticatedTichSanRoute
   '/trang-chu': typeof AuthenticatedTrangChuRoute
   '/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/ca-nhan': typeof AuthenticatedCaNhanRoute
+  '/_authenticated/quan-tri': typeof AuthenticatedQuanTriRoute
   '/_authenticated/tich-san': typeof AuthenticatedTichSanRoute
   '/_authenticated/trang-chu': typeof AuthenticatedTrangChuRoute
   '/_authenticated/tham-khao/$id': typeof AuthenticatedThamKhaoIdRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/ca-nhan'
+    | '/quan-tri'
     | '/tich-san'
     | '/trang-chu'
     | '/tham-khao/$id'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/ca-nhan'
+    | '/quan-tri'
     | '/tich-san'
     | '/trang-chu'
     | '/tham-khao/$id'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/ca-nhan'
+    | '/_authenticated/quan-tri'
     | '/_authenticated/tich-san'
     | '/_authenticated/trang-chu'
     | '/_authenticated/tham-khao/$id'
@@ -226,6 +238,13 @@ declare module '@tanstack/react-router' {
       path: '/ca-nhan'
       fullPath: '/ca-nhan'
       preLoaderRoute: typeof AuthenticatedCaNhanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/quan-tri': {
+      id: '/_authenticated/quan-tri'
+      path: '/quan-tri'
+      fullPath: '/quan-tri'
+      preLoaderRoute: typeof AuthenticatedQuanTriRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/tich-san': {
@@ -289,6 +308,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaNhanRoute: typeof AuthenticatedCaNhanRoute
+  AuthenticatedQuanTriRoute: typeof AuthenticatedQuanTriRoute
   AuthenticatedTichSanRoute: typeof AuthenticatedTichSanRoute
   AuthenticatedTrangChuRoute: typeof AuthenticatedTrangChuRoute
   AuthenticatedThamKhaoIdRoute: typeof AuthenticatedThamKhaoIdRoute
@@ -299,6 +319,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaNhanRoute: AuthenticatedCaNhanRoute,
+  AuthenticatedQuanTriRoute: AuthenticatedQuanTriRoute,
   AuthenticatedTichSanRoute: AuthenticatedTichSanRoute,
   AuthenticatedTrangChuRoute: AuthenticatedTrangChuRoute,
   AuthenticatedThamKhaoIdRoute: AuthenticatedThamKhaoIdRoute,

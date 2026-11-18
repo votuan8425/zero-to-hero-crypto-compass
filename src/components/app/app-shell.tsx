@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { BookMarked, CloudOff, Home, Layers, UserRound } from "lucide-react";
+import { BookMarked, CloudOff, Home, Layers, ShieldCheck, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { BrandMark } from "./brand";
 import { NotificationBell } from "./notification-bell";
 import { SyncBadge } from "./sync-badge";
 import { useSync } from "./sync-provider";
+import { useUser } from "@/hooks/use-user";
+import { isAdminUser } from "@/lib/admin";
 
 export const NAV_ITEMS = [
   { to: "/trang-chu", label: "TRANG CHỦ", icon: Home },
@@ -13,8 +15,13 @@ export const NAV_ITEMS = [
   { to: "/tham-khao", label: "THAM KHẢO", icon: BookMarked },
 ] as const;
 
+/** Tab Quản trị chỉ admin thấy — dashboard xem/sửa/xóa tài khoản khác. */
+const ADMIN_NAV_ITEM = { to: "/quan-tri", label: "QUẢN TRỊ", icon: ShieldCheck } as const;
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { online } = useSync();
+  const user = useUser();
+  const navItems = isAdminUser(user) ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
@@ -23,7 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <BrandMark />
           </Link>
           <nav className="hidden flex-1 items-center gap-1 md:flex" aria-label="Điều hướng chính">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -53,8 +60,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur-xl md:hidden"
         aria-label="Điều hướng chính"
       >
-        <ul className="grid grid-cols-4">
-          {NAV_ITEMS.map((item) => (
+        <ul className={navItems.length > 4 ? "grid grid-cols-5" : "grid grid-cols-4"}>
+          {navItems.map((item) => (
             <li key={item.to}>
               <Link
                 to={item.to}
