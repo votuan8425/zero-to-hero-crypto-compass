@@ -1,7 +1,8 @@
 /**
  * The admin's public allocation (Tham khảo).
  *
- * Only the admin writes this row; every logged-in user reads it. The
+ * Only the admin writes this row; the full row is readable only by the
+ * admin and approved followers (others only see that it exists). The
  * payload is PERCENT-ONLY: { symbol, name, percent }. Quantities,
  * values, invested amounts, notes and images are never stored here and
  * never leave the admin's own portfolio. The row also stores two public
@@ -209,17 +210,31 @@ export async function fetchAdminAllocation(): Promise<AdminAllocation | null> {
 
 /**
  * Reads every published allocation — danh sách nhà đầu tư đã đăng để user
- * chọn và theo dõi (tab Tham khảo). Chỉ admin mới ghi được (RLS), nên
- * hiện danh sách chỉ có admin sau khi họ bấm "Đăng portfolio". Đọc được
- * mọi hàng nhờ policy "admin allocation select all". Trả về [] khi bảng
- * chưa có hoặc migration chưa áp dụng, để UI hiện trạng thái trống.
+ * chọn và theo dõi (tab Tham khảo). Chỉ admin mới ghi được (RLS).
+ *
+ * Quyền đọc do backend quyết định: hàm `list_published_investors` chỉ trả
+ * về ai đã đăng + lúc cập nhật (để hiện thẻ khóa và nút theo dõi); toàn bộ
+ * tỷ lệ %, lãi/lỗ và lời nhắn chỉ đọc được bởi chính nhà đầu tư hoặc người
+ * đã được duyệt theo dõi. Hàng chưa được xem thì trả về với dữ liệu rỗng.
+ * Trả về [] khi bảng chưa có, để UI hiện trạng thái trống.
  */
 export async function fetchPublishedAllocations(): Promise<AdminAllocation[]> {
+  let listed: { user_id: string; updated_at: string }[] = [];
+  try {
+    const { data, error } = await supabase.rpc("list_published_investors");
+    if (!error && Array.isArray(data)) {
+      listed = data as { user_id: string; updated_at: string }[];
+    }
+  } catch {
+    // Bỏ qua — vẫn thử đọc các hàng được phép xem bên dưới.
+  }
+
   const selects = [
     "user_id, slices, updated_at, started_at, pnl_pct, message, message_updated_at",
     "user_id, slices, updated_at, started_at, pnl_pct",
     "user_id, slices, updated_at",
   ];
+  let visible: AdminAllocation[] = [];
   for (const columns of selects) {
     try {
       const { data, error } = await supabase
@@ -227,14 +242,31 @@ export async function fetchPublishedAllocations(): Promise<AdminAllocation[]> {
         .select(columns)
         .order("updated_at", { ascending: false });
       if (!error) {
-        const rows = (data ?? []) as AdminAllocationRow[];
-        return rows.map(parseRow);
+        visible = ((data ?? []) as unknown as AdminAllocationRow[]).map(parseRow);
+        break;
       }
     } catch {
       // Thử với ít cột hơn (migration chưa áp dụng).
     }
   }
-  return [];
+
+  const byId = new Map(visible.map((a) => [a.user_id, a]));
+  const merged: AdminAllocation[] = listed.map(
+    (row) =>
+      byId.get(row.user_id) ?? {
+        user_id: row.user_id,
+        slices: [],
+        updated_at: row.updated_at,
+        startedAt: null,
+        pnlPct: null,
+        message: null,
+        messageUpdatedAt: null,
+      },
+  );
+  for (const a of visible) {
+    if (!listed.some((r) => r.user_id === a.user_id)) merged.push(a);
+  }
+  return merged.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 /**
