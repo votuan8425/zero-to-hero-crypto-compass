@@ -524,57 +524,6 @@ function ReferencesPage() {
           : "Biểu đồ danh mục chỉ hiện sau khi admin duyệt yêu cầu theo dõi của bạn. Gửi yêu cầu trên thẻ nhà đầu tư rồi chờ duyệt."}
       </div>
 
-      {/* Yêu cầu theo dõi đang chờ admin duyệt. */}
-      {admin && pendingRequests.length > 0 && (
-        <section className="panel mb-5 border-primary/40 p-4">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
-            <UserCheck className="h-4 w-4 text-primary" />
-            Yêu cầu theo dõi đang chờ duyệt · {pendingRequests.length}
-          </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Duyệt thì người đó xem được biểu đồ danh mục của bạn; từ chối thì họ có thể gửi lại sau.
-          </p>
-          <ul className="space-y-2">
-            {pendingRequests.map((req) => (
-              <li
-                key={req.id}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3"
-              >
-                <span className="lime-gradient grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
-                  {(req.follower_name ?? "?").trim().charAt(0).toUpperCase() || "?"}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">
-                    {req.follower_name ?? "Người dùng"}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Gửi lúc {formatDateTime(req.created_at)}
-                  </span>
-                </span>
-                <span className="flex shrink-0 gap-2">
-                  <Button
-                    variant="hero"
-                    size="sm"
-                    disabled={reviewBusy === req.id}
-                    onClick={() => void reviewRequest(req, "approved")}
-                  >
-                    <Check /> Duyệt
-                  </Button>
-                  <Button
-                    variant="surface"
-                    size="sm"
-                    disabled={reviewBusy === req.id}
-                    onClick={() => void reviewRequest(req, "rejected")}
-                  >
-                    <X /> Từ chối
-                  </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {/* Mỗi nhà đầu tư MỘT thẻ duy nhất (đã gộp xem trước + danh mục đầy đủ).
           Chart chỉ hiện khi là chính admin đó hoặc đã được duyệt theo dõi. */}
       {publishedQuery.isLoading || followQuery.isLoading ? (
@@ -702,6 +651,59 @@ function ReferencesPage() {
           })}
         </div>
       )}
+        </section>
+      )}
+
+      {/* Bảng danh sách chờ duyệt theo dõi — dành cho admin, nằm ở CUỐI
+          trang Tham khảo. Duyệt thì người đó xem được biểu đồ danh mục của
+          bạn; từ chối thì họ có thể gửi lại sau. */}
+      {admin && pendingRequests.length > 0 && (
+        <section className="panel mt-6 border-primary/40 p-4">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <UserCheck className="h-4 w-4 text-primary" />
+            Yêu cầu theo dõi đang chờ duyệt · {pendingRequests.length}
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Duyệt thì người đó xem được biểu đồ danh mục của bạn; từ chối thì họ có thể gửi lại sau.
+          </p>
+          <ul className="space-y-2">
+            {pendingRequests.map((req) => (
+              <li
+                key={req.id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3"
+              >
+                <span className="lime-gradient grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black text-primary-foreground">
+                  {(req.follower_name ?? "?").trim().charAt(0).toUpperCase() || "?"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">
+                    {req.follower_name ?? "Người dùng"}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Gửi lúc {formatDateTime(req.created_at)}
+                  </span>
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    disabled={reviewBusy === req.id}
+                    onClick={() => void reviewRequest(req, "approved")}
+                  >
+                    <Check /> Duyệt
+                  </Button>
+                  <Button
+                    variant="surface"
+                    size="sm"
+                    disabled={reviewBusy === req.id}
+                    onClick={() => void reviewRequest(req, "rejected")}
+                  >
+                    <X /> Từ chối
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>
