@@ -20,9 +20,18 @@ export interface HistoryPoint {
 
 export interface PortfolioHistory {
   points: HistoryPoint[];
+  /** Giá trị danh mục tại đầu kỳ (0 nếu lúc đó chưa mua gì). */
   startValue: number;
   endValue: number;
+  /** Vốn mua thêm trong kỳ (theo giá mua, gồm phí — khớp định nghĩa vốn đã tích sản). */
+  deposits: number;
+  /**
+   * Lãi/lỗ do GIÁ trong kỳ: giá trị cuối − giá trị đầu kỳ − tiền mua thêm.
+   * Tiền mua thêm KHÔNG phải lãi — nếu không trừ, cứ mua thêm là PNL
+   * tăng ảo (mua 211 USDT thì PNL tăng 211 USDT dù giá đang giảm).
+   */
   pnl: number;
+  /** PNL chia cho (giá trị đầu kỳ + tiền mua thêm). */
   pnlPct: number | null;
 }
 
@@ -74,9 +83,20 @@ const EMPTY: PortfolioHistory = {
   points: [],
   startValue: 0,
   endValue: 0,
+  deposits: 0,
   pnl: 0,
   pnlPct: null,
 };
+
+/** Tính PNL kỳ từ giá trị đầu/cuối và tiền mua thêm trong kỳ. */
+function pnlOf(startValue: number, endValue: number, deposits: number): {
+  pnl: number;
+  pnlPct: number | null;
+} {
+  const pnl = endValue - startValue - deposits;
+  const basis = startValue + deposits;
+  return { pnl, pnlPct: basis > 0 ? (pnl / basis) * 100 : null };
+}
 
 export function computePortfolioHistory(
   txs: Tx[],
@@ -94,10 +114,33 @@ export function computePortfolioHistory(
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length === 0) return EMPTY;
   const buys = txs
-    .map((t) => ({ symbol: t.symbol, at: txDateMs(t.tx_date), qty: t.quantity }))
+    .map((t) => ({
+      symbol: t.symbol,
+      at: txDateMs(t.tx_date),
+      qty: t.quantity,
+      cost: t.quantity * Number(t.price_usd) + Number(t.fee_usd || 0),
+    }))
     .filter((b) => Number.isFinite(b.qty) && b.qty > 0)
     .sort((a, b) => a.at - b.at);
   if (buys.length === 0) return EMPTY;
+  // Giá trị tại đầu kỳ: số lượng đã mua tới đầu kỳ × giá đóng cửa gần nhất
+  // tại hoặc trước đầu kỳ (0 nếu lúc đó chưa mua gì).
+  let startValue = 0;
+  for (const [symbol, series] of Object.entries(closesBySymbol)) {
+    const price = priceAt(series, fromMs);
+    if (price == null || price <= 0) continue;
+    let qty = 0;
+    for (const b of buys) {
+      if (b.symbol !== symbol) continue;
+      if (b.at > fromMs) break;
+      qty += b.qty;
+    }
+    if (qty > 0) startValue += qty * price;
+  }
+  // Vốn mua thêm trong kỳ (sau đầu kỳ, tới cuối kỳ): theo giá mua đã trả.
+  const deposits = buys
+    .filter((b) => b.at > fromMs && b.at <= toMs && Number.isFinite(b.cost))
+    .reduce((s, b) => s + b.cost, 0);
   const points: HistoryPoint[] = [];
   for (const t of sorted) {
     let value = 0;
@@ -119,14 +162,13 @@ export function computePortfolioHistory(
   while (first < points.length && points[first]!.value <= 0) first++;
   const trimmed = points.slice(first);
   if (trimmed.length === 0) return EMPTY;
-  const startValue = trimmed[0]!.value;
   const endValue = trimmed[trimmed.length - 1]!.value;
   return {
     points: trimmed,
     startValue,
     endValue,
-    pnl: endValue - startValue,
-    pnlPct: startValue > 0 ? ((endValue - startValue) / startValue) * 100 : null,
+    deposits,
+    ...pnlOf(startValue, endValue, deposits),
   };
 }
 
@@ -148,14 +190,14 @@ export function withLiveEndpoint(
   } else {
     points[points.length - 1] = { t: last.t, value: liveValue };
   }
-  const startValue = points[0]!.value;
+  const startValue = h.startValue;
   const endValue = points[points.length - 1]!.value;
   return {
     points,
     startValue,
     endValue,
-    pnl: endValue - startValue,
-    pnlPct: startValue > 0 ? ((endValue - startValue) / startValue) * 100 : null,
+    deposits: h.deposits,
+    ...pnlOf(startValue, endValue, h.deposits),
   };
 }
 

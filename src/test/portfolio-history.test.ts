@@ -43,8 +43,55 @@ describe("lịch sử giá trị danh mục", () => {
     expect(h.points.map((p) => p.value)).toEqual([100, 110, 240, 260]);
     expect(h.startValue).toBe(100);
     expect(h.endValue).toBe(260);
-    expect(h.pnl).toBe(160);
-    expect(h.pnlPct).toBeCloseTo(160, 6);
+    // Tiền mua thêm trong kỳ (lần mua ngày 3: 1 × 100) KHÔNG tính là lãi.
+    expect(h.deposits).toBe(100);
+    expect(h.pnl).toBe(60);
+    expect(h.pnlPct).toBeCloseTo(30, 6);
+  });
+
+  it("mua thêm trong kỳ không tính là lãi: giá trị tăng nhưng PNL âm", () => {
+    // Mua 1 BTC ngày 1 (100), mua thêm 1 BTC ngày 2 (90), giá rớt còn 80:
+    // giá trị 100 → 160 (tăng) nhưng thực tế lỗ 30 vì đã bỏ thêm 90.
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-01", price_usd: 100 }),
+        tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-02", price_usd: 90 }),
+      ],
+      { BTC: daily([100, 90, 80]) },
+      t0,
+      t0 + 2 * DAY,
+    );
+    expect(h.points.map((p) => p.value)).toEqual([100, 180, 160]);
+    expect(h.startValue).toBe(100);
+    expect(h.deposits).toBe(90);
+    expect(h.pnl).toBe(-30);
+    expect(h.pnlPct).toBeCloseTo(-30 / 190 * 100, 6);
+  });
+
+  it("không mua thêm trong kỳ thì PNL là biến động giá thuần", () => {
+    const h = computePortfolioHistory(
+      [tx({ symbol: "BTC", quantity: 1, tx_date: "2026-10-01", price_usd: 100 })],
+      { BTC: daily([100, 90, 80]) },
+      t0,
+      t0 + 2 * DAY,
+    );
+    expect(h.deposits).toBe(0);
+    expect(h.pnl).toBe(-20);
+    expect(h.pnlPct).toBe(-20);
+  });
+
+  it("tiền mua thêm gồm cả phí", () => {
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-01", price_usd: 100 }),
+        tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-02", price_usd: 100, fee_usd: 5 }),
+      ],
+      { BTC: daily([100, 100, 100]) },
+      t0,
+      t0 + 2 * DAY,
+    );
+    expect(h.deposits).toBe(105);
+    expect(h.pnl).toBe(-5);
   });
 
   it("cộng nhiều coin, mỗi coin dùng giá của chính nó", () => {
@@ -99,6 +146,7 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
     ],
     startValue: 100,
     endValue: 120,
+    deposits: 0,
     pnl: 20,
     pnlPct: 20,
   };
@@ -121,6 +169,20 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
 
   it("không có giá live thì giữ nguyên", () => {
     expect(withLiveEndpoint(base, t0 + 3 * DAY, null)).toBe(base);
+  });
+
+  it("giữ tiền mua thêm và tính lại PNL theo giá live", () => {
+    const withDeposits: PortfolioHistory = {
+      ...base,
+      deposits: 50,
+      pnl: -30,
+      pnlPct: -20,
+    };
+    const h = withLiveEndpoint(withDeposits, t0 + 3 * DAY, 150);
+    expect(h.deposits).toBe(50);
+    expect(h.endValue).toBe(150);
+    expect(h.pnl).toBe(0);
+    expect(h.pnlPct).toBe(0);
   });
 });
 

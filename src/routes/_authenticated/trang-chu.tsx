@@ -168,12 +168,19 @@ function HomePage() {
                 <span className="text-muted-foreground">{formatDateTime(hovered.t)}</span>
               ) : history && history.points.length > 0 ? (
                 <>
-                  <span className="text-muted-foreground">
-                    PNL trong {historyPeriodLabel(period)}{" "}
-                  </span>
-                  <PnlText value={history.pnl} className="font-semibold">
-                    {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
-                  </PnlText>
+                  <div>
+                    <span className="text-muted-foreground">
+                      PNL trong {historyPeriodLabel(period)}{" "}
+                    </span>
+                    <PnlText value={history.pnl} className="font-semibold">
+                      {`${history.pnl >= 0 ? "+" : ""}${money(history.pnl)} (${formatPercent(history.pnlPct, 2, true)})`}
+                    </PnlText>
+                  </div>
+                  {history.deposits > 0 && (
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      Đã mua thêm {money(history.deposits)} trong {historyPeriodLabel(period)}
+                    </div>
+                  )}
                 </>
               ) : (
                 <span className="text-muted-foreground">
