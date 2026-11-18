@@ -20,25 +20,39 @@ export interface InvestorFollow {
   updated_at: string;
 }
 
-/** Trạng thái theo dõi của user hiện tại đối với một nhà đầu tư (null = chưa gửi). */
+/** Trạng thái theo dõi của user hiện tại đối với một nhà đầu tư (null = chưa gửi).
+ * Chỉ tính yêu cầu do chính mình gửi (follower_id = mình) — không tính yêu
+ * cầu người khác gửi tới mình (investor_id = mình) vì cùng investor_id. */
 export async function fetchMyFollowStatus(
   investorId: string,
 ): Promise<FollowStatus | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
   const { data, error } = await supabase
     .from("investor_follows")
     .select("status")
     .eq("investor_id", investorId)
+    .eq("follower_id", user.id)
     .maybeSingle();
   if (error || !data) return null;
   const s = (data as { status?: unknown }).status;
   return s === "approved" || s === "pending" || s === "rejected" ? s : null;
 }
 
-/** Tất cả trạng thái theo dõi của user hiện tại (map investor_id -> status). */
+/** Tất cả trạng thái theo dõi của user hiện tại (map investor_id -> status).
+ * Chỉ các yêu cầu do chính mình gửi — không lấy yêu cầu người khác gửi tới
+ * mình (vì cùng investor_id sẽ làm thẻ của chính mình hiện sai trạng thái). */
 export async function fetchMyFollowMap(): Promise<Record<string, FollowStatus>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return {};
   const { data, error } = await supabase
     .from("investor_follows")
-    .select("investor_id, status");
+    .select("investor_id, status")
+    .eq("follower_id", user.id);
   if (error || !data) return {};
   const map: Record<string, FollowStatus> = {};
   for (const row of data as { investor_id?: unknown; status?: unknown }[]) {
@@ -51,7 +65,10 @@ export async function fetchMyFollowMap(): Promise<Record<string, FollowStatus>> 
   return map;
 }
 
-/** Gửi yêu cầu theo dõi (hoặc gửi lại sau khi bị từ chối). */
+/** Gửi yêu cầu theo dõi (hoặc gửi lại sau khi bị từ chối).
+ * Admin theo dõi chính mình thì duyệt ngay lập tức (không có trạng thái
+ * "đang chờ duyệt" trên chính danh mục của mình — admin không cần chờ ai
+ * duyệt để xem danh mục của mình). */
 export async function requestFollow(investorId: string): Promise<void> {
   const {
     data: { user },
@@ -63,12 +80,14 @@ export async function requestFollow(investorId: string): Promise<void> {
     (typeof meta["username"] === "string" && meta["username"]) ||
     (typeof user.email === "string" ? user.email.split("@")[0] : "") ||
     null;
+  const status: FollowStatus =
+    investorId === user.id ? "approved" : "pending";
   const { error } = await supabase.from("investor_follows").upsert(
     {
       investor_id: investorId,
       follower_id: user.id,
       follower_name: followerName,
-      status: "pending",
+      status,
     },
     { onConflict: "investor_id,follower_id" },
   );
