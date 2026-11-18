@@ -198,7 +198,7 @@ function InvestorPortfolioCard({
               </button>
             )
           )}
-          {followStatus === "approved" && !isOwn && onCancelFollow && (
+          {followStatus === "approved" && onCancelFollow && (
             <button
               type="button"
               onClick={onCancelFollow}
@@ -207,6 +207,36 @@ function InvestorPortfolioCard({
             >
               <UserX className="h-3.5 w-3.5" /> Ngừng theo dõi
             </button>
+          )}
+          {/* Admin cũng theo dõi được chính mình (để test luồng duyệt): khi
+              chưa gửi yêu cầu thì hiện nút Theo dõi, đang chờ thì hiện trạng
+              thái chờ duyệt. Người thường thì nút này nằm ở trạng thái khóa. */}
+          {isOwn && followStatus !== "approved" && (
+            <div className="mt-4">
+              {followStatus === "pending" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                    <Send className="h-3.5 w-3.5" /> Đang chờ duyệt
+                  </span>
+                  {onCancelFollow && (
+                    <button
+                      type="button"
+                      onClick={onCancelFollow}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Hủy yêu cầu
+                    </button>
+                  )}
+                </div>
+              ) : (
+                onRequestFollow && (
+                  <Button variant="surface" size="sm" onClick={onRequestFollow} disabled={busy}>
+                    <Send /> {busy ? "Đang gửi…" : "Theo dõi"}
+                  </Button>
+                )
+              )}
+            </div>
           )}
         </>
       ) : (
@@ -541,15 +571,11 @@ function ReferencesPage() {
                 key={inv.user_id}
                 allocation={inv}
                 isOwn={isOwn}
-                followStatus={isOwn ? "approved" : (followMap[inv.user_id] ?? null)}
+                followStatus={followMap[inv.user_id] ?? null}
                 isAdmin={isOwn}
                 onEditMessage={isOwn ? () => setMessageDialogOpen(true) : undefined}
-                onRequestFollow={
-                  isOwn ? undefined : () => void sendFollowRequest(inv.user_id)
-                }
-                onCancelFollow={
-                  isOwn ? undefined : () => void cancelFollowRequest(inv.user_id)
-                }
+                onRequestFollow={() => void sendFollowRequest(inv.user_id)}
+                onCancelFollow={() => void cancelFollowRequest(inv.user_id)}
                 busy={followBusy === inv.user_id}
               />
             );
