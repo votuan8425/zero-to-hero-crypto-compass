@@ -9,6 +9,9 @@
  * "Mua vào" là giá cửa hàng mua lại (dùng để định giá tài sản đang giữ).
  */
 
+import { OUNCE_TO_CHI, OUNCE_TO_LUONG } from "./coins";
+import type { PriceQuote } from "./portfolio";
+
 export interface MetalQuote {
   /** Giá cửa hàng mua lại, VND mỗi đơn vị (chỉ / lượng). */
   bidVnd: number;
@@ -97,4 +100,45 @@ export function metalSlotAt(now: Date): Date {
   }
   const best = Math.max(...candidates.filter((t) => t <= now.getTime()));
   return new Date(best);
+}
+
+/* ---------------- Đơn vị mua: vàng theo chỉ/lượng, bạc theo lượng ---------------- */
+
+/** Giá bán ra (ask) theo đơn vị mua đã chọn: vàng mua theo lượng = ask mỗi chỉ × 10. */
+export function metalAskPerUnit(
+  quote: PriceQuote | undefined,
+  symbol: string,
+  unit: "chỉ" | "lượng",
+): number | null {
+  if (!quote || quote.askVnd == null || quote.askVnd <= 0) return null;
+  if (symbol === "PAXG" && unit === "lượng") return quote.askVnd * CHI_PER_LUONG;
+  return quote.askVnd;
+}
+
+/**
+ * Hệ số quy đổi nến thế giới (USD/ounce) sang VND theo đơn vị trong nước,
+ * để biểu đồ vàng/bạc khớp với bảng giá (chỉ/lượng) thay vì ounce.
+ */
+export function metalChartFactor(symbol: string, usdVnd: number | null): number | null {
+  if (!usdVnd || usdVnd <= 0) return null;
+  if (symbol === "PAXG") return usdVnd / OUNCE_TO_CHI;
+  if (symbol === "KAG") return usdVnd / OUNCE_TO_LUONG;
+  return null;
+}
+
+/**
+ * Quy đổi lần mua vàng/bạc về đơn vị lưu chuẩn (vàng: chỉ; bạc: lượng).
+ * Vàng mua theo lượng thì số lượng × 10, giá mỗi đơn vị ÷ 10; phí giữ
+ * nguyên vì phí là tổng tiền, không phải giá mỗi đơn vị.
+ */
+export function normalizeMetalPurchase(
+  symbol: string,
+  quantity: number,
+  pricePerUnit: number,
+  unit: "chỉ" | "lượng",
+): { quantity: number; pricePerUnit: number } {
+  if (symbol === "PAXG" && unit === "lượng") {
+    return { quantity: quantity * CHI_PER_LUONG, pricePerUnit: pricePerUnit / CHI_PER_LUONG };
+  }
+  return { quantity, pricePerUnit };
 }

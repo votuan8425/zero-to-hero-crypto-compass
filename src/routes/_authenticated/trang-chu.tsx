@@ -237,7 +237,9 @@ function HomePage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold">{displaySymbol(h.symbol)}</span>
-                      <span className="truncate text-xs text-muted-foreground">{h.name}</span>
+                      {!unit && (
+                        <span className="truncate text-xs text-muted-foreground">{h.name}</span>
+                      )}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
@@ -342,8 +344,7 @@ function MarketPrices({
                       <div className="flex items-baseline gap-2">
                         <span className="font-semibold">{c.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          {displaySymbol(c.symbol)}
-                          {c.unit ? ` · 1 ${c.unit}` : ""}
+                          {c.unit ? `1 ${c.unit}` : displaySymbol(c.symbol)}
                         </span>
                       </div>
                       {!c.unit && (

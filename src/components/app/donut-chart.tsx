@@ -1,5 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { displaySymbol, coinName } from "@/lib/coins";
+import { displaySymbol, coinName, getCoin } from "@/lib/coins";
 import { formatPercent } from "@/lib/format";
 import { CoinLogo } from "./coin-logo";
 
@@ -53,7 +53,8 @@ export function DonutChart({
                 return (
                   <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
                     <div className="font-semibold">
-                      {coinName(p.symbol, p.name)} ({displaySymbol(p.symbol)})
+                      {coinName(p.symbol, p.name)}
+                      {getCoin(p.symbol)?.unit ? "" : ` (${displaySymbol(p.symbol)})`}
                     </div>
                     <div className="num text-primary">{formatPercent(p.percent)}</div>
                   </div>
@@ -84,7 +85,9 @@ export function DonutChart({
               <CoinLogo symbol={d.symbol} size={22} />
               <span className="min-w-0 flex-1 truncate">
                 <span className="font-medium">{displaySymbol(d.symbol)}</span>
-                <span className="ml-1.5 text-muted-foreground">{coinName(d.symbol, d.name)}</span>
+                {!getCoin(d.symbol)?.unit && (
+                  <span className="ml-1.5 text-muted-foreground">{coinName(d.symbol, d.name)}</span>
+                )}
               </span>
               <span className="num font-medium">{formatPercent(d.percent)}</span>
             </li>

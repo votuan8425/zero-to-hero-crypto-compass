@@ -55,6 +55,7 @@ import {
   formatPercent,
   type Currency,
 } from "@/lib/format";
+import { displaySymbol } from "@/lib/coins";
 
 export const Route = createFileRoute("/_authenticated/quan-tri")({
   head: () => ({
@@ -366,7 +367,7 @@ function UserCard({
               className="inline-flex items-center gap-1.5 rounded-full bg-surface-raised px-2.5 py-1 text-xs font-semibold ring-1 ring-border"
             >
               <CoinLogo symbol={s.symbol} size={18} />
-              {s.symbol} {formatPercent(s.percent, 1)}
+              {displaySymbol(s.symbol)} {formatPercent(s.percent, 1)}
             </span>
           ))}
           {stats.slices.length > 4 && (

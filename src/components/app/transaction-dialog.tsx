@@ -24,7 +24,8 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { COINS, displaySymbol, getCoin } from "@/lib/coins";
 import { saveTransaction } from "@/lib/data";
-import { formatMoney, todayKey, type Currency } from "@/lib/format";
+import { formatDateTime, formatMoney, todayKey, type Currency } from "@/lib/format";
+import { metalAskPerUnit, normalizeMetalPurchase } from "@/lib/metals";
 import type { Tx } from "@/lib/portfolio";
 import { usePrices } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
@@ -56,6 +57,8 @@ export function TransactionDialog({
   const [date, setDate] = useState(todayKey());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Đơn vị mua vàng đã chọn (bạc luôn theo lượng). */
+  const [metalUnit, setMetalUnit] = useState<"chỉ" | "lượng">("chỉ");
   const prices = usePrices();
   const usdVnd = prices.data?.usdVnd ?? null;
   const usdKrw = prices.data?.usdKrw ?? null;
@@ -70,6 +73,7 @@ export function TransactionDialog({
       // Vàng/bạc: luôn VND, ưu tiên giá VND chính xác đã lưu.
       const r = usdVnd ?? 0;
       setCur("VND");
+      setMetalUnit("chỉ");
       setSymbol(existing.symbol);
       setQty(String(existing.quantity));
       const pv = existing.price_vnd ?? (r ? existing.price_usd * r : NaN);
@@ -89,7 +93,10 @@ export function TransactionDialog({
       setDate(existing.tx_date);
       setNote(existing.note ?? "");
     } else {
-      if (getCoin(symbol)?.unit) setCur("VND");
+      if (getCoin(symbol)?.unit) {
+        setCur("VND");
+        if (symbol === "PAXG") setMetalUnit("chỉ");
+      }
       setQty("");
       setPrice("");
       setFee("");
@@ -102,10 +109,41 @@ export function TransactionDialog({
   const q = parseNum(qty);
   const p = parseNum(price);
   const f = fee ? parseNum(fee) : 0;
-  const total =
-    Number.isFinite(q) && Number.isFinite(p) ? q * p + (Number.isFinite(f) ? f : 0) : null;
+  const priceEmpty = price.trim() === "";
   const live = prices.data?.prices[symbol];
   const metal = getCoin(symbol)?.unit ? getCoin(symbol) : undefined;
+  /** Đơn vị mua thực tế: vàng chọn chỉ/lượng, bạc cố định lượng. */
+  const buyUnit: "chỉ" | "lượng" | null = metal
+    ? metal.symbol === "PAXG"
+      ? metalUnit
+      : "lượng"
+    : null;
+  /** Giá hiện tại quy theo đơn vị tiền tệ đang chọn (vàng/bạc luôn VND, theo đơn vị mua). */
+  const livePriceInCur = useMemo(() => {
+    if (!live) return null;
+    if (metal && buyUnit) return metalAskPerUnit(live, metal.symbol, buyUnit);
+    const r = rateFor(cur);
+    return r ? live.usd * r : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, metal, buyUnit, cur, usdVnd, usdKrw]);
+  /** Giá thực dùng để lưu: nhập tay, hoặc giá hiện tại khi để trống. */
+  const effP = priceEmpty ? livePriceInCur : p;
+  const total =
+    Number.isFinite(q) && effP != null && Number.isFinite(effP)
+      ? q * effP + (Number.isFinite(f) ? f : 0)
+      : null;
+  const pricePlaceholder =
+    metal && cur === "VND"
+      ? buyUnit === "lượng"
+        ? metal.symbol === "PAXG"
+          ? "Ví dụ: 137200000"
+          : "Ví dụ: 1598000"
+        : "Ví dụ: 13720000"
+      : cur === "VND"
+        ? "Ví dụ: 1650000000"
+        : cur === "KRW"
+          ? "Ví dụ: 88000000"
+          : "Ví dụ: 64000";
 
   const toUsd = useMemo(() => {
     const r = rateFor(cur);
@@ -119,8 +157,12 @@ export function TransactionDialog({
       toast.error("Số lượng phải lớn hơn 0.");
       return;
     }
-    if (!Number.isFinite(p) || p < 0) {
+    if (!priceEmpty && (!Number.isFinite(p) || p < 0)) {
       toast.error("Giá mua không hợp lệ.");
+      return;
+    }
+    if (effP == null || !Number.isFinite(effP) || effP < 0) {
+      toast.error("Chưa có giá hiện tại, vui lòng nhập giá mua.");
       return;
     }
     if (!Number.isFinite(f) || f < 0) {
@@ -137,20 +179,29 @@ export function TransactionDialog({
     }
     setBusy(true);
     try {
+      // Vàng mua theo lượng thì quy về chỉ để lưu chuẩn; bạc giữ nguyên lượng.
+      const norm = metal
+        ? normalizeMetalPurchase(symbol, q, effP, buyUnit ?? "chỉ")
+        : { quantity: q, pricePerUnit: effP };
+      // Để trống giá thì lấy giá hiện tại và ghi chú rõ để sau này biết.
+      const autoNote = priceEmpty
+        ? `Giá lấy theo giá hiện tại (${metal ? (metal.symbol === "PAXG" ? "SJC" : "Ancarat") : "giá thị trường"}${live?.updatedAt ? ` lúc ${formatDateTime(live.updatedAt)}` : prices.data?.fetchedAt ? ` lúc ${formatDateTime(prices.data.fetchedAt)}` : ""})`
+        : null;
+      const finalNote = [note.trim(), autoNote].filter(Boolean).join(" · ") || null;
       const status = await saveTransaction(
         qc,
         user.id,
         {
           symbol,
           coin_name: getCoin(symbol)?.name ?? symbol,
-          quantity: q,
-          price_usd: toUsd(p),
+          quantity: norm.quantity,
+          price_usd: toUsd(norm.pricePerUnit),
           fee_usd: toUsd(f || 0),
-          // Vàng/bạc luôn nhập bằng VND: lưu số VND chính xác.
-          price_vnd: metal ? p : null,
+          // Vàng/bạc luôn nhập bằng VND: lưu số VND chính xác (theo đơn vị lưu chuẩn).
+          price_vnd: metal ? norm.pricePerUnit : null,
           fee_vnd: metal ? f || 0 : null,
           tx_date: date,
-          note: note.trim() || null,
+          note: finalNote,
         },
         existing ?? undefined,
       );
@@ -186,6 +237,7 @@ export function TransactionDialog({
                 setSymbol(v);
                 // Giá vàng SJC / bạc Ancarat niêm yết bằng VND.
                 if (getCoin(v)?.unit) setCur("VND");
+                if (v === "PAXG") setMetalUnit("chỉ");
               }}
             >
               <SelectTrigger className="h-11">
@@ -195,7 +247,8 @@ export function TransactionDialog({
                 {COINS.map((c) => (
                   <SelectItem key={c.symbol} value={c.symbol}>
                     <span className="flex items-center gap-2">
-                      <CoinLogo symbol={c.symbol} size={18} /> {c.name} ({displaySymbol(c.symbol)})
+                      <CoinLogo symbol={c.symbol} size={18} /> {c.name}
+                      {c.unit ? "" : ` (${displaySymbol(c.symbol)})`}
                     </span>
                   </SelectItem>
                 ))}
@@ -203,7 +256,24 @@ export function TransactionDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="qty">Số lượng ({metal?.unit ?? displaySymbol(symbol)})</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="qty">Số lượng ({buyUnit ?? displaySymbol(symbol)})</Label>
+              {metal?.symbol === "PAXG" && (
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  value={metalUnit}
+                  onValueChange={(v) => v && setMetalUnit(v as "chỉ" | "lượng")}
+                >
+                  <ToggleGroupItem value="chỉ" className="h-7 px-2.5 text-xs">
+                    Chỉ
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="lượng" className="h-7 px-2.5 text-xs">
+                    Lượng
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
             <Input
               id="qty"
               inputMode="decimal"
@@ -216,14 +286,14 @@ export function TransactionDialog({
             {metal && (
               <p className="text-xs text-muted-foreground">
                 {metal.symbol === "PAXG"
-                  ? "Vàng tính theo chỉ (1 lượng = 10 chỉ), giá theo vàng SJC."
+                  ? "Vàng tính theo chỉ hoặc lượng (1 lượng = 10 chỉ), giá theo vàng SJC."
                   : "Bạc tính theo lượng, giá theo bạc Ancarat."}
               </p>
             )}
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="price">Giá mua mỗi {metal?.unit ?? displaySymbol(symbol)}</Label>
+              <Label htmlFor="price">Giá mua mỗi {buyUnit ?? displaySymbol(symbol)}</Label>
               {metal ? (
                 <span className="text-xs font-semibold text-muted-foreground">VND</span>
               ) : (
@@ -249,39 +319,23 @@ export function TransactionDialog({
               <Input
                 id="price"
                 inputMode="decimal"
-                required
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder={
-                  metal && cur === "VND"
-                    ? metal.symbol === "PAXG"
-                      ? "Ví dụ: 13720000"
-                      : "Ví dụ: 1598000"
-                    : cur === "VND"
-                    ? "Ví dụ: 1650000000"
-                    : cur === "KRW"
-                      ? "Ví dụ: 88000000"
-                      : "Ví dụ: 64000"
-                }
+                placeholder={pricePlaceholder}
                 className="num h-11"
               />
               <Button
                 type="button"
                 variant="surface"
                 className="h-11 shrink-0"
-                disabled={!live}
+                disabled={livePriceInCur == null}
                 onClick={() => {
-                  if (!live) return;
-                  // Vàng/bạc: lần mua dùng giá bán ra của SJC / Ancarat.
-                  const askUsd =
-                    live.askVnd != null && usdVnd ? live.askVnd / usdVnd : live.usd;
+                  if (livePriceInCur == null) return;
                   setPrice(
                     String(
                       cur === "USDT"
-                        ? Math.round(askUsd * 1e6) / 1e6
-                        : cur === "KRW"
-                          ? Math.round(usdKrw ? askUsd * usdKrw : live.krw)
-                          : Math.round(live.askVnd ?? live.vnd),
+                        ? Math.round(livePriceInCur * 1e6) / 1e6
+                        : Math.round(livePriceInCur),
                     ),
                   );
                 }}
@@ -289,6 +343,9 @@ export function TransactionDialog({
                 Giá hiện tại
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Để trống để lấy giá {metal ? "bán ra" : "thị trường"} hiện tại.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -326,7 +383,9 @@ export function TransactionDialog({
             />
           </div>
           <div className="flex items-center justify-between rounded-lg bg-surface-raised px-4 py-3 text-sm">
-            <span className="text-muted-foreground">Tổng chi</span>
+            <span className="text-muted-foreground">
+              Tổng chi{priceEmpty && livePriceInCur != null ? " (theo giá hiện tại)" : ""}
+            </span>
             <span className="num font-semibold">
               {total != null ? formatMoney(total, cur) : "—"}
             </span>

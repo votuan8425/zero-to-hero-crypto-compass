@@ -14,6 +14,7 @@ import { PnlText } from "./stat";
 import { displaySymbol, getCoin } from "@/lib/coins";
 import type { PriceQuote } from "@/lib/portfolio";
 import { fetchCandlesFromBrowser } from "@/lib/market-client";
+import { metalChartFactor } from "@/lib/metals";
 import {
   CHART_VISIBLE_COUNT,
   getCandles,
@@ -163,7 +164,20 @@ export function PriceChartDialog({
     enabled: open && !!symbol,
     staleTime: 60_000,
   });
-  const points = candles.data?.points ?? [];
+  // Vàng/bạc: nến CoinGecko là giá thế giới USD/ounce — quy đổi sang VND
+  // theo đơn vị trong nước (chỉ/lượng) để khớp với bảng giá và khung mua/bán.
+  const chartFactor = metalChartFactor(symbol ?? "", usdVnd);
+  const points = useMemo(() => {
+    const raw = candles.data?.points ?? [];
+    if (!chartFactor) return raw;
+    return raw.map((p) => ({
+      ...p,
+      o: p.o * chartFactor,
+      h: p.h * chartFactor,
+      l: p.l * chartFactor,
+      c: p.c * chartFactor,
+    }));
+  }, [candles.data, chartFactor]);
   const visible =
     points.length === 0 ? 0 : Math.min(Math.max(visibleCount, MIN_VISIBLE), points.length);
   const maxPan = Math.max(0, points.length - visible);
@@ -300,15 +314,13 @@ export function PriceChartDialog({
       ? ((lastVisible.c - firstVisible.c) / firstVisible.c) * 100
       : null;
   const up = (change ?? 0) >= 0;
-  // Vàng/bạc: biểu đồ là giá thế giới theo ounce (chỉ để xem xu hướng);
+  // Vàng/bạc: biểu đồ là giá thế giới đã quy đổi theo chỉ/lượng (chỉ để xem xu hướng);
   // giá trong nước SJC / Ancarat hiện ở khung riêng phía trên.
   const metalUnit = coin?.unit;
-  // Vàng/bạc luôn hiển thị bằng VND, kể cả biểu đồ giá thế giới.
+  // Điểm nến vàng/bạc đã quy đổi sang VND theo chỉ/lượng ở trên nên hiện thẳng số VND.
   const show = (usd: number | null, compact = false) =>
-    metalUnit
-      ? formatMoney(usd != null && usdVnd ? usd * usdVnd : null, "VND", { compact })
-      : money(usd, compact);
-  const unit = metalUnit ? "thế giới / ounce" : "";
+    metalUnit ? formatMoney(usd, "VND", { compact }) : money(usd, compact);
+  const unit = metalUnit ? `/ ${metalUnit}` : "";
   const canPan = points.length > visible;
   const canZoomIn = visible > MIN_VISIBLE;
   const canZoomOut = visible < points.length;
@@ -383,7 +395,7 @@ export function PriceChartDialog({
           </DialogTitle>
           <DialogDescription>
             {metalUnit
-              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}, cập nhật lúc 6:00 và 22:00 mỗi ngày${quote?.updatedAt ? ` (lần gần nhất ${formatDateTime(quote.updatedAt)})` : ""}. Biểu đồ bên dưới là giá ${coin?.name.toLowerCase()} thế giới (mỗi ounce), chỉ để xem xu hướng.`
+              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}, cập nhật lúc 6:00 và 22:00 mỗi ngày${quote?.updatedAt ? ` (lần gần nhất ${formatDateTime(quote.updatedAt)})` : ""}. Biểu đồ bên dưới là giá thế giới quy đổi theo ${metalUnit}, chỉ để xem xu hướng.`
               : "Biểu đồ giá từ OKX."}
           </DialogDescription>
         </DialogHeader>

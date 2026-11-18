@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { COINS, coinName, displaySymbol, getCoin, quantityUnit } from "@/lib/coins";
-import { metalSlotAt, parseAncaratSilver, parsePnjSjc, parseSjcGold } from "@/lib/metals";
+import {
+  COINS,
+  OUNCE_TO_CHI,
+  OUNCE_TO_LUONG,
+  coinLogoUrl,
+  coinName,
+  displaySymbol,
+  getCoin,
+  quantityUnit,
+} from "@/lib/coins";
+import {
+  metalAskPerUnit,
+  metalChartFactor,
+  metalSlotAt,
+  normalizeMetalPurchase,
+  parseAncaratSilver,
+  parsePnjSjc,
+  parseSjcGold,
+} from "@/lib/metals";
 import { GOLD_SYMBOL, SILVER_SYMBOL } from "@/lib/prices.functions";
 import { computeAllocation, computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
 
@@ -46,9 +63,55 @@ describe("vàng và bạc trong danh sách mua", () => {
     expect(quantityUnit("BTC")).toBe("BTC");
   });
 
-  it("vàng hiển thị nguồn SJC, bạc hiển thị nguồn Ancarat", () => {
-    expect(displaySymbol("PAXG")).toBe("SJC");
-    expect(displaySymbol("KAG")).toBe("Ancarat");
+  it("vàng/bạc chỉ hiện tên Vàng/Bạc, không hiện mã PAXG/KAG hay nguồn", () => {
+    expect(displaySymbol("PAXG")).toBe("Vàng");
+    expect(displaySymbol("KAG")).toBe("Bạc");
+    expect(displaySymbol("BTC")).toBe("BTC");
+    // Nguồn giá vẫn giữ để giải thích trong biểu đồ giá.
+    expect(getCoin("PAXG")?.priceSource).toBe("SJC");
+    expect(getCoin("KAG")?.priceSource).toBe("Ancarat");
+  });
+
+  it("logo vàng/bạc là thỏi vẽ riêng, khớp dạng tròn như token khác", () => {
+    expect(coinLogoUrl("PAXG")).toBe("/coin-logos/paxg.svg");
+    expect(coinLogoUrl("KAG")).toBe("/coin-logos/kag.svg");
+    expect(coinLogoUrl("BTC")).toBe("https://assets.coincap.io/assets/icons/btc@2x.png");
+    expect(coinLogoUrl("KHAC")).toBeNull();
+  });
+
+  it("tỉ lệ ounce đổi sang chỉ/lượng", () => {
+    expect(OUNCE_TO_CHI).toBeCloseTo(8.29426048, 8);
+    expect(OUNCE_TO_LUONG).toBeCloseTo(0.82942605, 8);
+  });
+
+  it("giá bán ra theo đơn vị mua: vàng lượng = ask mỗi chỉ × 10", () => {
+    const quote = { usd: 0, vnd: 13420000, krw: 0, change24h: null, askVnd: 13723000 };
+    expect(metalAskPerUnit(quote, "PAXG", "chỉ")).toBe(13723000);
+    expect(metalAskPerUnit(quote, "PAXG", "lượng")).toBe(137230000);
+    expect(metalAskPerUnit(quote, "KAG", "lượng")).toBe(13723000);
+    expect(metalAskPerUnit(undefined, "PAXG", "chỉ")).toBeNull();
+  });
+
+  it("hệ số quy đổi nến thế giới USD/ounce sang VND theo chỉ/lượng", () => {
+    expect(metalChartFactor("PAXG", 25000)).toBeCloseTo(25000 / 8.29426048, 3);
+    expect(metalChartFactor("KAG", 25000)).toBeCloseTo(25000 / 0.82942605, 3);
+    expect(metalChartFactor("BTC", 25000)).toBeNull();
+    expect(metalChartFactor("PAXG", null)).toBeNull();
+  });
+
+  it("lần mua vàng theo lượng quy về chỉ để lưu chuẩn", () => {
+    expect(normalizeMetalPurchase("PAXG", 2, 137230000, "lượng")).toEqual({
+      quantity: 20,
+      pricePerUnit: 13723000,
+    });
+    expect(normalizeMetalPurchase("PAXG", 2, 13723000, "chỉ")).toEqual({
+      quantity: 2,
+      pricePerUnit: 13723000,
+    });
+    expect(normalizeMetalPurchase("KAG", 3, 1598000, "lượng")).toEqual({
+      quantity: 3,
+      pricePerUnit: 1598000,
+    });
   });
 });
 
