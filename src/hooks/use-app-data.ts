@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { COINS } from "@/lib/coins";
 import { getPrices, type PricesResult } from "@/lib/prices.functions";
 import { fetchPricesFromBrowser } from "@/lib/market-client";
 import { profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
@@ -57,6 +58,23 @@ export const pricesQuery = queryOptions({
         // Giữ nguyên lỗi của server, rơi xuống giá lưu ở dưới.
       }
       return cached ? stale(cached) : res;
+    }
+    // Server thiếu giá một vài đồng (VD: TON không có cặp trên OKX, CoinGecko
+    // phía server bị giới hạn) thì lấy nốt từ trình duyệt (CoinGecko, IP khác)
+    // rồi gộp vào — trình duyệt không trả giá vàng/bạc nên giá SJC/Ancarat
+    // của server được giữ nguyên.
+    const missing = COINS.filter(
+      (c) => c.symbol !== "USDT" && !c.unit && res.prices[c.symbol] == null,
+    );
+    if (missing.length > 0) {
+      try {
+        const direct = await fetchPricesFromBrowser();
+        if (!direct.error) {
+          res = { ...res, prices: { ...res.prices, ...direct.prices } };
+        }
+      } catch {
+        // Giữ nguyên giá server đã lấy được.
+      }
     }
     localStorage.setItem(
       PRICE_CACHE,
