@@ -3,6 +3,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { displaySymbol, coinName, getCoin } from "@/lib/coins";
 import { formatPercent } from "@/lib/format";
 import { CoinLogo } from "./coin-logo";
+import { PnlText } from "./stat";
 
 export const CHART_COLORS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--chart-${n})`);
 
@@ -10,6 +11,56 @@ export interface DonutItem {
   symbol: string;
   name?: string | null;
   percent: number;
+  /** Lãi/lỗ % theo vốn của riêng token này (null khi chưa có — cột Lãi/Lỗ hiện "—"). */
+  pnlPct?: number | null;
+}
+
+const RADIAN = Math.PI / 180;
+/** Lát nhỏ hơn 8% thì chữ % không đủ chỗ trên vành — để trống, xem % ở bảng dưới. */
+const MIN_LABELED_PERCENT = 0.08;
+
+/**
+ * Ghi % lên giữa vành của từng lát cắt (Recharts truyền cho label các
+ * props của sector: cx, cy, midAngle, innerRadius, outerRadius, percent
+ * là phần trăm theo phân số 0–1). Chữ đậm màu tối + viền trắng mờ để đọc
+ * được trên mọi màu lát, cả theme sáng lẫn tối (các màu --chart đều sáng).
+ */
+function renderSlicePercent(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+}) {
+  const {
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    innerRadius = 0,
+    outerRadius = 0,
+    percent = 0,
+  } = props;
+  if (percent < MIN_LABELED_PERCENT) return null;
+  const radius = innerRadius + (outerRadius - innerRadius) / 2;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={12}
+      fontWeight={700}
+      fill="#1f2937"
+      stroke="rgba(255,255,255,0.9)"
+      strokeWidth={3}
+      paintOrder="stroke"
+    >
+      {formatPercent(percent * 100)}
+    </text>
+  );
 }
 
 export function DonutChart({
@@ -31,9 +82,15 @@ export function DonutChart({
   // chữ ở tâm, trông như bị lỗi). Bấm lại lát đó thì trở về mặc định.
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const active = activeIndex != null ? data[activeIndex] : null;
+  // Chỉ hiện cột Lãi/Lỗ khi có ít nhất một token có số liệu (danh mục từ
+  // ảnh chụp chỉ có % vị thế, không có lãi/lỗ từng token).
+  const showPnl = data.some((d) => d.pnlPct != null);
+  const cols = showPnl
+    ? "grid-cols-[minmax(0,1fr)_72px_72px]"
+    : "grid-cols-[minmax(0,1fr)_72px]";
   return (
-    <div className={showLegend ? "grid items-center gap-6 sm:grid-cols-[minmax(0,240px)_1fr]" : ""}>
-      <div className="relative" style={{ height }}>
+    <div className="space-y-4">
+      <div className="relative mx-auto w-full max-w-[280px]" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -45,6 +102,7 @@ export function DonutChart({
               paddingAngle={data.length > 1 ? 2 : 0}
               stroke="none"
               isAnimationActive
+              label={renderSlicePercent}
               onClick={(_, index) => setActiveIndex((prev) => (prev === index ? null : index))}
             >
               {data.map((d, i) => (
@@ -79,35 +137,55 @@ export function DonutChart({
         </div>
       </div>
       {showLegend && (
-        <ul className="space-y-3">
-          {data.map((d, i) => (
-            <li key={d.symbol} className="space-y-1.5">
-              <div className="flex items-center gap-3 text-sm">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
-                />
-                <CoinLogo symbol={d.symbol} size={22} />
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium">{displaySymbol(d.symbol)}</span>
-                  {!getCoin(d.symbol)?.unit && (
-                    <span className="ml-1.5 text-muted-foreground">{coinName(d.symbol, d.name)}</span>
+        <div>
+          <div
+            className={`grid ${cols} items-center gap-3 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground`}
+          >
+            <span>Token</span>
+            <span className="text-right">Vị thế</span>
+            {showPnl && <span className="text-right">Lãi / Lỗ</span>}
+          </div>
+          <ul className="divide-y divide-border">
+            {data.map((d, i) => (
+              <li key={d.symbol} className="space-y-1.5 py-2.5">
+                <div className={`grid ${cols} items-center gap-3`}>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                    <CoinLogo symbol={d.symbol} size={22} />
+                    <span className="min-w-0 truncate text-sm">
+                      <span className="font-semibold">{displaySymbol(d.symbol)}</span>
+                      {!getCoin(d.symbol)?.unit && (
+                        <span className="ml-1.5 text-muted-foreground">
+                          {coinName(d.symbol, d.name)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <span className="num text-right text-base font-bold">
+                    {formatPercent(d.percent)}
+                  </span>
+                  {showPnl && (
+                    <PnlText value={d.pnlPct ?? null} className="text-right text-base font-bold">
+                      {d.pnlPct != null ? formatPercent(d.pnlPct, 2, true) : "—"}
+                    </PnlText>
                   )}
-                </span>
-                <span className="num text-base font-bold">{formatPercent(d.percent)}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, d.percent))}%`,
-                    background: CHART_COLORS[i % CHART_COLORS.length],
-                  }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, d.percent))}%`,
+                      background: CHART_COLORS[i % CHART_COLORS.length],
+                    }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

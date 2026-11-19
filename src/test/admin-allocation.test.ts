@@ -12,12 +12,13 @@ import {
 import type { AllocationSlice } from "@/lib/portfolio";
 
 describe("admin allocation payload is percent-only", () => {
-  it("keeps only symbol, name and percent (drops quantity/value/invested)", () => {
+  it("keeps only symbol, name, percent and pnlPct (drops quantity/value/invested)", () => {
     const raw = [
       {
         symbol: "BTC",
         name: "Bitcoin",
         percent: 45.123,
+        pnlPct: -12.346,
         quantity: 1.5,
         valueUsd: 90000,
         investedUsd: 80000,
@@ -27,11 +28,11 @@ describe("admin allocation payload is percent-only", () => {
     ] as unknown as AllocationSlice[];
     const out = buildAdminAllocationSlices(raw);
     expect(out).toEqual([
-      { symbol: "BTC", name: "Bitcoin", percent: 45.12 },
-      { symbol: "ETH", name: "Ethereum", percent: 25 },
+      { symbol: "BTC", name: "Bitcoin", percent: 45.12, pnlPct: -12.35 },
+      { symbol: "ETH", name: "Ethereum", percent: 25, pnlPct: null },
     ]);
     for (const s of out) {
-      expect(Object.keys(s).sort()).toEqual(["name", "percent", "symbol"]);
+      expect(Object.keys(s).sort()).toEqual(["name", "percent", "pnlPct", "symbol"]);
       expect(JSON.stringify(s)).not.toMatch(/quantity|value|invested|note/i);
     }
   });
@@ -58,6 +59,18 @@ describe("allocationChanged", () => {
     expect(allocationChanged(prev, [{ symbol: "ETH", name: "Ethereum", percent: 45 }])).toBe(true);
     expect(allocationChanged(null, [{ symbol: "BTC", name: "Bitcoin", percent: 45 }])).toBe(true);
     expect(allocationChanged(prev, prev)).toBe(false);
+  });
+  it("đổi khi lãi/lỗ % từng token lệch > 0.01, không đổi khi lệch ≤ 0.01", () => {
+    const prev = [{ symbol: "BTC", name: "Bitcoin", percent: 45, pnlPct: -12.3 }];
+    expect(
+      allocationChanged(prev, [{ symbol: "BTC", name: "Bitcoin", percent: 45, pnlPct: -12.31 }]),
+    ).toBe(false);
+    expect(
+      allocationChanged(prev, [{ symbol: "BTC", name: "Bitcoin", percent: 45, pnlPct: -12.32 }]),
+    ).toBe(true);
+    expect(
+      allocationChanged(prev, [{ symbol: "BTC", name: "Bitcoin", percent: 45, pnlPct: null }]),
+    ).toBe(true);
   });
 });
 

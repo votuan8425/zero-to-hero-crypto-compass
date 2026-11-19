@@ -163,6 +163,22 @@ describe("giá trị danh mục của vàng và bạc", () => {
     expect(slices.map((s) => s.symbol).sort()).toEqual(["KAG", "PAXG"]);
     expect(slices.reduce((s, x) => s + x.percent, 0)).toBeCloseTo(100, 6);
   });
+
+  it("phân bổ kèm lãi/lỗ % từng token (để hiện cột Lãi/Lỗ ở Tham khảo)", () => {
+    const holdings = computeHoldings(
+      [
+        tx({ symbol: "PAXG", coin_name: "Vàng", quantity: 2, price_usd: 3800 }),
+        tx({ symbol: "KAG", coin_name: "Bạc", quantity: 10, price_usd: 45 }),
+      ],
+      prices,
+    );
+    const { slices } = computeAllocation(holdings);
+    const gold = slices.find((s) => s.symbol === "PAXG");
+    const silver = slices.find((s) => s.symbol === "KAG");
+    // Vàng: vốn 7600, giá trị 7800 → +2,63%. Bạc: vốn 450, giá trị 477,8 → +6,18%.
+    expect(gold?.pnlPct).toBeCloseTo((200 / 7600) * 100, 6);
+    expect(silver?.pnlPct).toBeCloseTo((27.8 / 450) * 100, 6);
+  });
 });
 
 describe("giá vàng SJC và bạc Ancarat", () => {

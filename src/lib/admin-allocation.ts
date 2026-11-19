@@ -3,11 +3,13 @@
  *
  * Only the admin writes this row; the full row is readable only by the
  * admin and approved followers (others only see that it exists). The
- * payload is PERCENT-ONLY: { symbol, name, percent }. Quantities,
+ * payload is PERCENT-ONLY: { symbol, name, percent, pnlPct }. Quantities,
  * values, invested amounts, notes and images are never stored here and
  * never leave the admin's own portfolio. The row also stores two public
  * stats: the accumulation start date and the current P/L % vs capital
- * (both percentages/dates — never money amounts).
+ * (both percentages/dates — never money amounts). pnlPct là lãi/lỗ %
+ * theo vốn của riêng từng token, tính lúc admin đăng — cùng tính chất
+ * % như percent nên không lộ số tiền.
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
@@ -19,6 +21,8 @@ export type AdminAllocationSlice = {
   symbol: string;
   name: string;
   percent: number;
+  /** Lãi/lỗ % theo vốn của riêng token này (null khi chưa có giá live lúc đăng). */
+  pnlPct?: number | null;
 };
 
 /** Số liệu công khai kèm theo portfolio đã đăng — chỉ % và thời gian, không số tiền. */
@@ -86,8 +90,10 @@ export function selectPublishedAllocation(
 /**
  * Builds the percent-only payload from an allocation. Extra fields on the
  * input (quantity, value, invested, ...) are dropped by construction:
- * only symbol / name / percent are copied, percentages are rounded to
- * 2 decimals and zero/negative slices are removed.
+ * only symbol / name / percent / pnlPct are copied, percentages are
+ * rounded to 2 decimals and zero/negative slices are removed. pnlPct là
+ * % lãi/lỗ theo vốn của riêng token đó — vẫn chỉ là % nên không lộ số
+ * tiền, và nằm trong cùng cột slices (jsonb) nên không cần migration.
  */
 export function buildAdminAllocationSlices(
   slices: readonly AllocationSlice[],
@@ -97,22 +103,31 @@ export function buildAdminAllocationSlices(
       symbol: s.symbol,
       name: s.name,
       percent: Math.round(s.percent * 100) / 100,
+      pnlPct:
+        s.pnlPct != null && Number.isFinite(s.pnlPct)
+          ? Math.round(s.pnlPct * 100) / 100
+          : null,
     }))
     .filter((s) => s.symbol && Number.isFinite(s.percent) && s.percent > 0)
     .sort((a, b) => b.percent - a.percent);
 }
 
-/** True when two payloads differ by more than 0.01 on any slice. */
+/** True when two payloads differ by more than 0.01 on any slice (vị thế % hoặc lãi/lỗ % từng token). */
 export function allocationChanged(
   prev: readonly AdminAllocationSlice[] | null | undefined,
   next: readonly AdminAllocationSlice[],
 ): boolean {
   const a = prev ?? [];
   if (a.length !== next.length) return true;
-  const bySymbol = new Map(a.map((s) => [s.symbol, s.percent]));
+  const bySymbol = new Map(a.map((s) => [s.symbol, s]));
   return next.some((s) => {
     const p = bySymbol.get(s.symbol);
-    return p === undefined || Math.abs(p - s.percent) > 0.01;
+    if (p === undefined) return true;
+    if (Math.abs(p.percent - s.percent) > 0.01) return true;
+    const pp = p.pnlPct ?? null;
+    const np = s.pnlPct ?? null;
+    if (pp === null || np === null) return pp !== np;
+    return Math.abs(pp - np) > 0.01;
   });
 }
 
@@ -166,14 +181,18 @@ function parseSlices(raw: unknown): AdminAllocationSlice[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(
-      (s): s is { symbol: unknown; name: unknown; percent: unknown } =>
+      (s): s is { symbol: unknown; name: unknown; percent: unknown; pnlPct?: unknown } =>
         typeof s === "object" && s !== null,
     )
-    .map((s) => ({
-      symbol: String(s.symbol ?? ""),
-      name: String(s.name ?? ""),
-      percent: Number(s.percent ?? 0),
-    }))
+    .map((s) => {
+      const pnl = s.pnlPct == null ? null : Number(s.pnlPct);
+      return {
+        symbol: String(s.symbol ?? ""),
+        name: String(s.name ?? ""),
+        percent: Number(s.percent ?? 0),
+        pnlPct: pnl != null && Number.isFinite(pnl) ? pnl : null,
+      };
+    })
     .filter((s) => s.symbol && Number.isFinite(s.percent) && s.percent > 0);
 }
 

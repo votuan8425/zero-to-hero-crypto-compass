@@ -440,6 +440,10 @@ function ReferencesPage() {
             symbol: s.symbol,
             name: s.name,
             percent: Math.round(s.percent * 100) / 100,
+            pnlPct:
+              s.pnlPct != null && Number.isFinite(s.pnlPct)
+                ? Math.round(s.pnlPct * 100) / 100
+                : null,
           })),
           updated_at: new Date().toISOString(),
           startedAt: adminStats.startedAt,

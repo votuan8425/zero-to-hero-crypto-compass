@@ -141,6 +141,8 @@ export interface AllocationSlice {
   symbol: string;
   name: string;
   percent: number;
+  /** Lãi/lỗ % theo vốn của riêng token này (null khi chưa có giá live). */
+  pnlPct?: number | null;
 }
 
 /** Allocation by current value; falls back to cost basis when any price is missing. */
@@ -154,7 +156,12 @@ export function computeAllocation(holdings: Holding[]): {
   const slices =
     total > 0
       ? holdings
-          .map((h) => ({ symbol: h.symbol, name: h.name, percent: (amount(h) / total) * 100 }))
+          .map((h) => ({
+            symbol: h.symbol,
+            name: h.name,
+            percent: (amount(h) / total) * 100,
+            pnlPct: h.pnlPct,
+          }))
           .sort((a, b) => b.percent - a.percent)
       : [];
   return { slices, basis: useValue ? "value" : "cost" };
