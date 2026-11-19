@@ -1,21 +1,10 @@
 /**
- * Màn hình chờ lúc mở app: clip người que đào Bitcoin + logo + vòng xoay tròn,
- * hiện ít nhất 2 giây trong khi dữ liệu của tài khoản đang được tải, rồi mới vào app.
- * Video chỉ là khúc người que (đã cắt quảng cáo + dòng disclaimer); logo và vòng xoay giữ như cũ.
- * Video chạy muted để trình duyệt cho tự phát (autoplay).
+ * Màn hình chờ lúc mở app: logo + vòng xoay tròn, hiện ít nhất 2 giây
+ * trong khi dữ liệu của tài khoản đang được tải, rồi mới vào app.
  */
 export function SplashScreen({ status }: { status?: string | undefined }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <video
-        src="/intro-miner.mp4"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden
-        className="mb-8 w-[min(88vw,380px)] rounded-2xl ring-1 ring-border"
-      />
       <div className="relative grid h-28 w-28 place-items-center">
         <span
           aria-hidden
