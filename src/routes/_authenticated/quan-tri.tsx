@@ -118,6 +118,8 @@ function AdminDashboardPage() {
     for (const u of users) {
       const s = computeAdminUserStats(u.holdings, pm, usdVnd);
       invested += s.investedUsd;
+      // Tài khoản chưa có giao dịch không làm "Tổng giá trị" thành trống.
+      if (u.holdings.length === 0) continue;
       value = value == null || s.valueUsd == null ? null : value + s.valueUsd;
     }
     return { invested, value, count: users.length };

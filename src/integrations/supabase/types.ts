@@ -310,29 +310,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      admin_delete_user: {
-        Args: { p_target: string }
-        Returns: undefined
-      }
+      admin_delete_user: { Args: { p_target: string }; Returns: undefined }
       admin_list_users: {
         Args: never
         Returns: {
           created_at: string
-          currency: string | null
-          display_name: string | null
-          email: string | null
+          currency: string
+          display_name: string
+          email: string
           holdings: Json
           invested_usd: number
-          last_sign_in_at: string | null
+          last_sign_in_at: string
           tx_count: number
           user_id: string
-          username: string | null
+          username: string
         }[]
       }
       admin_update_user: {
         Args: { p_currency: string; p_display_name: string; p_target: string }
         Returns: undefined
       }
+      is_admin_caller: { Args: never; Returns: boolean }
       list_published_investors: {
         Args: never
         Returns: {

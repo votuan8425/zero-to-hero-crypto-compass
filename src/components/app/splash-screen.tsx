@@ -2,7 +2,7 @@
  * Màn hình chờ lúc mở app: logo + vòng xoay tròn, hiện ít nhất 2 giây
  * trong khi dữ liệu của tài khoản đang được tải, rồi mới vào app.
  */
-export function SplashScreen({ status }: { status?: string }) {
+export function SplashScreen({ status }: { status?: string | undefined }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="relative grid h-28 w-28 place-items-center">
