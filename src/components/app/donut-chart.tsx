@@ -79,21 +79,32 @@ export function DonutChart({
         </div>
       </div>
       {showLegend && (
-        <ul className="space-y-2.5">
+        <ul className="space-y-3">
           {data.map((d, i) => (
-            <li key={d.symbol} className="flex items-center gap-3 text-sm">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
-              />
-              <CoinLogo symbol={d.symbol} size={22} />
-              <span className="min-w-0 flex-1 truncate">
-                <span className="font-medium">{displaySymbol(d.symbol)}</span>
-                {!getCoin(d.symbol)?.unit && (
-                  <span className="ml-1.5 text-muted-foreground">{coinName(d.symbol, d.name)}</span>
-                )}
-              </span>
-              <span className="num font-medium">{formatPercent(d.percent)}</span>
+            <li key={d.symbol} className="space-y-1.5">
+              <div className="flex items-center gap-3 text-sm">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                />
+                <CoinLogo symbol={d.symbol} size={22} />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{displaySymbol(d.symbol)}</span>
+                  {!getCoin(d.symbol)?.unit && (
+                    <span className="ml-1.5 text-muted-foreground">{coinName(d.symbol, d.name)}</span>
+                  )}
+                </span>
+                <span className="num text-base font-bold">{formatPercent(d.percent)}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, d.percent))}%`,
+                    background: CHART_COLORS[i % CHART_COLORS.length],
+                  }}
+                />
+              </div>
             </li>
           ))}
         </ul>
