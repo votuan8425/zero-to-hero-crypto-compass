@@ -240,7 +240,7 @@ export function PortfolioChart({
           <span className="font-semibold">
             {formatValue ? formatValue(hovered.value) : formatMoney(hovered.value, "USDT")}
           </span>
-          <span className="text-muted-foreground"> · {formatDateTime(hovered.t)}</span>
+          <span className="text-muted-foreground"> · {formatDateTime(new Date(hovered.t))}</span>
         </div>
       )}
     </div>

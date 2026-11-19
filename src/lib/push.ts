@@ -31,11 +31,11 @@ export function getPushPermission(): NotificationPermission | "unsupported" {
   return Notification.permission;
 }
 
-export function urlBase64ToUint8Array(base64: string): Uint8Array {
+export function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const base64url = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(base64url);
-  const out = new Uint8Array(raw.length);
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
   return out;
 }

@@ -102,31 +102,31 @@ export function parseAdminUsers(rows: unknown): AdminUserRow[] {
   return rows
     .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null)
     .map((r) => {
-      const rawHoldings = Array.isArray(r.holdings) ? r.holdings : [];
+      const rawHoldings = Array.isArray(r["holdings"]) ? r["holdings"] : [];
       const holdings: AdminHolding[] = rawHoldings
         .filter((h): h is Record<string, unknown> => typeof h === "object" && h !== null)
         .map((h) => {
-          const vnd = h.invested_vnd == null ? null : num(h.invested_vnd, NaN);
+          const vnd = h["invested_vnd"] == null ? null : num(h["invested_vnd"], NaN);
           return {
-            symbol: normalizeSymbol(typeof h.symbol === "string" ? h.symbol : ""),
-            coin_name: typeof h.coin_name === "string" ? h.coin_name : "",
-            quantity: num(h.quantity),
-            invested_usd: num(h.invested_usd),
+            symbol: normalizeSymbol(typeof h["symbol"] === "string" ? h["symbol"] : ""),
+            coin_name: typeof h["coin_name"] === "string" ? h["coin_name"] : "",
+            quantity: num(h["quantity"]),
+            invested_usd: num(h["invested_usd"]),
             invested_vnd: vnd != null && Number.isFinite(vnd) ? vnd : null,
           };
         })
-        .filter((h) => h.symbol !== "")
+        .filter((h) => h["symbol"] !== "")
         .sort((a, b) => b.invested_usd - a.invested_usd);
       return {
-        user_id: typeof r.user_id === "string" ? r.user_id : "",
-        email: typeof r.email === "string" ? r.email : null,
-        username: typeof r.username === "string" ? r.username : null,
-        display_name: typeof r.display_name === "string" ? r.display_name : null,
-        currency: normalizeCurrency(typeof r.currency === "string" ? r.currency : null),
-        created_at: typeof r.created_at === "string" ? r.created_at : "",
-        last_sign_in_at: typeof r.last_sign_in_at === "string" ? r.last_sign_in_at : null,
-        tx_count: num(r.tx_count),
-        invested_usd: num(r.invested_usd),
+        user_id: typeof r["user_id"] === "string" ? r["user_id"] : "",
+        email: typeof r["email"] === "string" ? r["email"] : null,
+        username: typeof r["username"] === "string" ? r["username"] : null,
+        display_name: typeof r["display_name"] === "string" ? r["display_name"] : null,
+        currency: normalizeCurrency(typeof r["currency"] === "string" ? r["currency"] : null),
+        created_at: typeof r["created_at"] === "string" ? r["created_at"] : "",
+        last_sign_in_at: typeof r["last_sign_in_at"] === "string" ? r["last_sign_in_at"] : null,
+        tx_count: num(r["tx_count"]),
+        invested_usd: num(r["invested_usd"]),
         holdings,
       };
     })
@@ -155,7 +155,7 @@ export async function adminUpdateUser(
 ): Promise<void> {
   const { error } = await supabase.rpc("admin_update_user", {
     p_target: targetId,
-    p_display_name: patch.display_name,
+    p_display_name: patch.display_name ?? "",
     p_currency: patch.currency,
   });
   if (error) throw error;

@@ -107,6 +107,48 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          investor_id: string
+          link: string
+          push_attempts: number
+          push_sent_at: string | null
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          investor_id: string
+          link?: string
+          push_attempts?: number
+          push_sent_at?: string | null
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          investor_id?: string
+          link?: string
+          push_attempts?: number
+          push_sent_at?: string | null
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -134,6 +176,36 @@ export type Database = {
           local_migrated_at?: string | null
           settings?: Json
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -238,6 +310,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_user: { Args: { p_target: string }; Returns: undefined }
+      admin_list_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          currency: string
+          display_name: string
+          email: string
+          holdings: Json
+          invested_usd: number
+          last_sign_in_at: string
+          tx_count: number
+          user_id: string
+          username: string
+        }[]
+      }
+      admin_update_user: {
+        Args: { p_currency: string; p_display_name: string; p_target: string }
+        Returns: undefined
+      }
+      is_admin_caller: { Args: never; Returns: boolean }
       list_published_investors: {
         Args: never
         Returns: {
