@@ -25,7 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { COINS, displaySymbol, getCoin } from "@/lib/coins";
 import { saveTransaction } from "@/lib/data";
 import { formatDateTime, formatMoney, todayKey, type Currency } from "@/lib/format";
-import { metalAskPerUnit, normalizeMetalPurchase } from "@/lib/metals";
+import { metalAskPerUnit, metalBidPerUnit, normalizeMetalPurchase } from "@/lib/metals";
 import type { Holding, Tx } from "@/lib/portfolio";
 import { actionPercent, roundActionPercent } from "@/lib/swap";
 import { logActivity } from "@/lib/activity";
@@ -62,6 +62,8 @@ export function TransactionDialog({
   const [date, setDate] = useState(todayKey());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Giao dịch đang sửa là một lần BÁN (số lượng âm, tạo từ đổi token). */
+  const isSell = existing != null && existing.quantity < 0;
   /** Đơn vị mua vàng đã chọn (bạc luôn theo lượng). */
   const [metalUnit, setMetalUnit] = useState<"chỉ" | "lượng">("chỉ");
   const prices = usePrices();
@@ -79,7 +81,8 @@ export function TransactionDialog({
       setCur("VND");
       setMetalUnit("chỉ");
       setSymbol(existing.symbol);
-      setQty(String(existing.quantity));
+      // Bán thì số lượng lưu âm — hiện giá trị tuyệt đối, lúc lưu sẽ gắn lại dấu trừ.
+      setQty(String(Math.abs(existing.quantity)));
       const pv = existing.price_vnd ?? (r ? existing.price_usd * r : NaN);
       const fv = existing.fee_vnd ?? (r ? existing.fee_usd * r : 0);
       setPrice(Number.isFinite(pv) ? String(Math.round(pv)) : "");
@@ -91,7 +94,8 @@ export function TransactionDialog({
       const useCur: Currency = rateFor(defaultCurrency) ? defaultCurrency : "USDT";
       setCur(useCur);
       setSymbol(existing.symbol);
-      setQty(String(existing.quantity));
+      // Bán thì số lượng lưu âm — hiện giá trị tuyệt đối, lúc lưu sẽ gắn lại dấu trừ.
+      setQty(String(Math.abs(existing.quantity)));
       setPrice(String(Math.round(existing.price_usd * r * 1e6) / 1e6));
       setFee(existing.fee_usd ? String(Math.round(existing.fee_usd * r * 100) / 100) : "");
       setDate(existing.tx_date);
@@ -122,14 +126,18 @@ export function TransactionDialog({
       ? metalUnit
       : "lượng"
     : null;
-  /** Giá hiện tại quy theo đơn vị tiền tệ đang chọn (vàng/bạc luôn VND, theo đơn vị mua). */
+  /** Giá hiện tại quy theo đơn vị tiền tệ đang chọn (vàng/bạc luôn VND, theo đơn vị mua). Bán thì dùng giá mua vào (bid), mua thì dùng giá bán ra (ask). */
   const livePriceInCur = useMemo(() => {
     if (!live) return null;
-    if (metal && buyUnit) return metalAskPerUnit(live, metal.symbol, buyUnit);
+    if (metal && buyUnit) {
+      return isSell
+        ? metalBidPerUnit(live, metal.symbol, buyUnit)
+        : metalAskPerUnit(live, metal.symbol, buyUnit);
+    }
     const r = rateFor(cur);
     return r ? live.usd * r : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, metal, buyUnit, cur, usdVnd, usdKrw]);
+  }, [live, metal, buyUnit, cur, usdVnd, usdKrw, isSell]);
   /** Giá thực dùng để lưu: nhập tay, hoặc giá hiện tại khi để trống. */
   const effP = priceEmpty ? livePriceInCur : p;
   const total =
@@ -198,7 +206,8 @@ export function TransactionDialog({
         {
           symbol,
           coin_name: getCoin(symbol)?.name ?? symbol,
-          quantity: norm.quantity,
+          // Bán thì số lượng lưu âm (giữ nguyên loại giao dịch khi sửa).
+          quantity: isSell ? -norm.quantity : norm.quantity,
           price_usd: toUsd(norm.pricePerUnit),
           fee_usd: toUsd(f || 0),
           // Vàng/bạc luôn nhập bằng VND: lưu số VND chính xác (theo đơn vị lưu chuẩn).
@@ -227,6 +236,7 @@ export function TransactionDialog({
           symbol,
           pct: pct != null ? roundActionPercent(pct) : null,
         });
+        await qc.invalidateQueries({ queryKey: ["admin-activities", user.id] });
       }
       onOpenChange(false);
     } catch (err) {
@@ -241,8 +251,14 @@ export function TransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{existing ? "Sửa giao dịch" : "Thêm lần tích sản"}</DialogTitle>
-          <DialogDescription>Ghi lại một lần mua định kỳ (DCA).</DialogDescription>
+          <DialogTitle>
+            {existing ? (isSell ? "Sửa giao dịch bán" : "Sửa giao dịch") : "Thêm lần tích sản"}
+          </DialogTitle>
+          <DialogDescription>
+            {isSell
+              ? "Sửa một lần bán/đổi — số lượng vẫn là số đã bán."
+              : "Ghi lại một lần mua định kỳ (DCA)."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">

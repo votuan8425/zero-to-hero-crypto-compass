@@ -3,8 +3,11 @@
  * tài sản kiểu OKX ở trang chủ.
  *
  * Cách tính: với mỗi mốc thời gian có giá đóng cửa, giá trị = tổng số lượng
- * đã mua tới mốc đó × giá đóng cửa gần nhất tại hoặc trước mốc đó.
- * Chỉ tính lần mua (app không có bán), nên số lượng chỉ tăng theo thời gian.
+ * đang nắm tới mốc đó × giá đóng cửa gần nhất tại hoặc trước mốc đó.
+ * Số lượng tính từ TẤT CẢ giao dịch (mua cộng, bán/đổi trừ) nên swap/bán
+ * được phản ánh đúng; tiền bán thu về được cộng lại khi tính PNL (nếu
+ * không, cứ bán là PNL âm oan vì giá trị danh mục giảm mà tiền thu về
+ * không được tính).
  * Giá trị tính bằng USD; hiển thị quy đổi theo tiền tệ người dùng chọn ở
  * tầng giao diện (giống tổng giá trị hiện tại).
  */
@@ -25,10 +28,14 @@ export interface PortfolioHistory {
   endValue: number;
   /** Vốn mua thêm trong kỳ (theo giá mua, gồm phí — khớp định nghĩa vốn đã tích sản). */
   deposits: number;
+  /** Tiền thu về từ bán/đổi trong kỳ (theo giá bán, trừ phí). */
+  withdrawals: number;
   /**
-   * Lãi/lỗ do GIÁ trong kỳ: giá trị cuối − giá trị đầu kỳ − tiền mua thêm.
-   * Tiền mua thêm KHÔNG phải lãi — nếu không trừ, cứ mua thêm là PNL
-   * tăng ảo (mua 211 USDT thì PNL tăng 211 USDT dù giá đang giảm).
+   * Lãi/lỗ do GIÁ trong kỳ: giá trị cuối − giá trị đầu kỳ − tiền mua thêm
+   * + tiền bán thu về. Tiền mua thêm KHÔNG phải lãi — nếu không trừ, cứ
+   * mua thêm là PNL tăng ảo (mua 211 USDT thì PNL tăng 211 USDT dù giá
+   * đang giảm). Tiền bán thu về cũng phải cộng lại — nếu không, cứ bán
+   * là PNL âm oan vì giá trị danh mục giảm mà tiền thu về không được tính.
    */
   pnl: number;
   /** PNL chia cho (giá trị đầu kỳ + tiền mua thêm). */
@@ -45,7 +52,15 @@ export type HistoryPeriod = (typeof HISTORY_PERIODS)[number];
 
 /** Số ngày mỗi kỳ xem: 1D→1, 1W→7, 1M→30, 3M→90, 1Y→365. */
 export function historyPeriodDays(period: HistoryPeriod): number {
-  return period === "1D" ? 1 : period === "1W" ? 7 : period === "1M" ? 30 : period === "3M" ? 90 : 365;
+  return period === "1D"
+    ? 1
+    : period === "1W"
+      ? 7
+      : period === "1M"
+        ? 30
+        : period === "3M"
+          ? 90
+          : 365;
 }
 
 /** Nhãn tiếng Việt cho dòng PNL theo kỳ ("PNL trong 1 tháng …"). */
@@ -89,18 +104,25 @@ const EMPTY: PortfolioHistory = {
   startValue: 0,
   endValue: 0,
   deposits: 0,
+  withdrawals: 0,
   pnl: 0,
   pnlPct: null,
   fromMs: 0,
   toMs: 0,
 };
 
-/** Tính PNL kỳ từ giá trị đầu/cuối và tiền mua thêm trong kỳ. */
-function pnlOf(startValue: number, endValue: number, deposits: number): {
+/** Tính PNL kỳ từ giá trị đầu/cuối, tiền mua thêm và tiền bán thu về. */
+function pnlOf(
+  startValue: number,
+  endValue: number,
+  deposits: number,
+  withdrawals: number | null | undefined,
+): {
   pnl: number;
   pnlPct: number | null;
 } {
-  const pnl = endValue - startValue - deposits;
+  const w = withdrawals ?? 0;
+  const pnl = endValue - startValue - deposits + w;
   const basis = startValue + deposits;
   return { pnl, pnlPct: basis > 0 ? (pnl / basis) * 100 : null };
 }
@@ -120,33 +142,53 @@ export function computePortfolioHistory(
   }
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length === 0) return EMPTY;
-  const buys = txs
+  // Mọi giao dịch (mua cộng, bán/đổi trừ) theo thứ tự ngày — số lượng đang
+  // nắm tại một mốc = tổng số lượng tới mốc đó. `cost` là dòng tiền: mua
+  // thì tiền ra (dương), bán thì tiền vào (âm).
+  const flows = txs
     .map((t) => ({
       symbol: t.symbol,
       at: txDateMs(t.tx_date),
       qty: t.quantity,
       cost: t.quantity * Number(t.price_usd) + Number(t.fee_usd || 0),
     }))
-    .filter((b) => Number.isFinite(b.qty) && b.qty > 0)
+    .filter((b) => Number.isFinite(b.qty) && b.qty !== 0)
     .sort((a, b) => a.at - b.at);
-  if (buys.length === 0) return EMPTY;
-  // Một đồng đang nắm mà không có nến nào (tải nến lỗi VÀ không có giá live
-  // để lấp) thì đừng vẽ chart thiếu đồng đó — trả rỗng để UI hiện "chưa có
-  // dữ liệu" thay vì đường tổng thấp hẳn rồi điểm cuối live kéo lên, gây
-  // PNL ảo (từng thấy PNL 1D nhảy +500 trong khi biến động thật chỉ vài USDT).
-  const heldInPeriod = new Set(buys.filter((b) => b.at <= toMs).map((b) => b.symbol));
+  if (flows.length === 0) return EMPTY;
+  // Một đồng có số lượng đang nắm > 0 tại một thời điểm trong kỳ mà không
+  // có nến nào (tải nến lỗi VÀ không có giá live để lấp) thì đừng vẽ chart
+  // thiếu đồng đó — trả rỗng để UI hiện "chưa có dữ liệu" thay vì đường
+  // tổng thấp hẳn rồi điểm cuối live kéo lên, gây PNL ảo (từng thấy PNL
+  // 1D nhảy +500 trong khi biến động thật chỉ vài USDT). Đồng đã bán hết
+  // TRƯỚC đầu kỳ và không có giao dịch trong kỳ thì không cần nến.
+  const heldInPeriod = new Set<string>();
+  for (const f of flows) {
+    if (f.at > toMs) continue;
+    if (f.at <= fromMs) {
+      // Số lượng tới đầu kỳ — chỉ cần nến nếu còn đang nắm.
+      let qtyAtStart = 0;
+      for (const g of flows) {
+        if (g.symbol !== f.symbol || g.at > fromMs) continue;
+        qtyAtStart += g.qty;
+      }
+      if (qtyAtStart > 0) heldInPeriod.add(f.symbol);
+    } else {
+      // Có giao dịch trong kỳ — số lượng thay đổi trong kỳ nên cần nến.
+      heldInPeriod.add(f.symbol);
+    }
+  }
   for (const symbol of heldInPeriod) {
     const series = closesBySymbol[symbol];
     if (!series || series.length === 0) return EMPTY;
   }
-  // Giá trị tại đầu kỳ: số lượng đã mua tới đầu kỳ × giá đóng cửa gần nhất
-  // tại hoặc trước đầu kỳ (0 nếu lúc đó chưa mua gì).
+  // Giá trị tại đầu kỳ: số lượng đang nắm tới đầu kỳ × giá đóng cửa gần
+  // nhất tại hoặc trước đầu kỳ (0 nếu lúc đó chưa nắm gì).
   let startValue = 0;
   for (const [symbol, series] of Object.entries(closesBySymbol)) {
     const price = priceAt(series, fromMs);
     if (price == null || price <= 0) continue;
     let qty = 0;
-    for (const b of buys) {
+    for (const b of flows) {
       if (b.symbol !== symbol) continue;
       if (b.at > fromMs) break;
       qty += b.qty;
@@ -154,9 +196,13 @@ export function computePortfolioHistory(
     if (qty > 0) startValue += qty * price;
   }
   // Vốn mua thêm trong kỳ (sau đầu kỳ, tới cuối kỳ): theo giá mua đã trả.
-  const deposits = buys
-    .filter((b) => b.at > fromMs && b.at <= toMs && Number.isFinite(b.cost))
+  // Tiền bán thu về trong kỳ: theo giá bán đã thu (trừ phí).
+  const deposits = flows
+    .filter((b) => b.qty > 0 && b.at > fromMs && b.at <= toMs && Number.isFinite(b.cost))
     .reduce((s, b) => s + b.cost, 0);
+  const withdrawals = flows
+    .filter((b) => b.qty < 0 && b.at > fromMs && b.at <= toMs && Number.isFinite(b.cost))
+    .reduce((s, b) => s - b.cost, 0);
   const points: HistoryPoint[] = [];
   for (const t of sorted) {
     let value = 0;
@@ -164,7 +210,7 @@ export function computePortfolioHistory(
       const price = priceAt(series, t);
       if (price == null || price <= 0) continue;
       let qty = 0;
-      for (const b of buys) {
+      for (const b of flows) {
         if (b.symbol !== symbol) continue;
         if (b.at > t) break;
         qty += b.qty;
@@ -195,7 +241,8 @@ export function computePortfolioHistory(
     startValue,
     endValue,
     deposits,
-    ...pnlOf(startValue, endValue, deposits),
+    withdrawals,
+    ...pnlOf(startValue, endValue, deposits, withdrawals),
     fromMs,
     toMs,
   };
@@ -226,7 +273,8 @@ export function withLiveEndpoint(
     startValue,
     endValue,
     deposits: h.deposits,
-    ...pnlOf(startValue, endValue, h.deposits),
+    withdrawals: h.withdrawals ?? 0,
+    ...pnlOf(startValue, endValue, h.deposits, h.withdrawals ?? 0),
     fromMs: h.fromMs,
     toMs: h.toMs,
   };

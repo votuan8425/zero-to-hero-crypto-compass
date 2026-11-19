@@ -492,7 +492,12 @@ function ReferencesPage() {
         return;
       }
       await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
-      await logActivity({ userId: user.id, type: "message" });
+      // Chỉ ghi nhật ký khi thật sự có thay đổi (lời nhắn hoặc portfolio)
+      // — bấm Lưu mà không sửa gì thì không tạo dòng "Đổi lời nhắn" giả.
+      if (res !== "unchanged") {
+        await logActivity({ userId: user.id, type: "message" });
+        await qc.invalidateQueries({ queryKey: ["admin-activities", user.id] });
+      }
       setMessageDialogOpen(false);
       toast.success(message.trim() ? "Đã lưu lời nhắn của nhà đầu tư." : "Đã gỡ lời nhắn.");
     } catch (e) {
@@ -525,6 +530,7 @@ function ReferencesPage() {
           type: "update",
           meta: { allocation: allocationSummary(allocation.slices) },
         });
+        await qc.invalidateQueries({ queryKey: ["admin-activities", user.id] });
       }
       toast.success(
         res === "unchanged"

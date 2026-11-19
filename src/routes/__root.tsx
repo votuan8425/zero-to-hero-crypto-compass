@@ -17,10 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isNetworkError, profileQuery, referencesQuery, transactionsQuery } from "@/lib/data";
 import { fetchPublishedAllocations, publishedAllocationsKey } from "@/lib/admin-allocation";
 import { pricesQuery } from "@/hooks/use-app-data";
-import {
-  portfolioHistoryQuery,
-  type HistorySeries,
-} from "@/hooks/use-portfolio-history";
+import { portfolioHistoryQuery, type HistorySeries } from "@/hooks/use-portfolio-history";
 import { computeHoldings, computeTotals, type Tx } from "@/lib/portfolio";
 import {
   computePortfolioHistory,
@@ -196,9 +193,7 @@ function RootComponent() {
   // Đăng ký service worker 1 lần lúc mở app: cần cho Web Push và để trình
   // duyệt cho cài app về màn hình chính (PWA). Không hỏi quyền ở đây.
   useEffect(() => {
-    void import("@/lib/push").then(({ registerServiceWorker }) =>
-      registerServiceWorker(),
-    );
+    void import("@/lib/push").then(({ registerServiceWorker }) => registerServiceWorker());
   }, []);
 
   useEffect(() => {
@@ -251,10 +246,8 @@ function RootComponent() {
           if (!cancelled && remaining() > 0) {
             setBootStatus("Đang tính giá trị ước tính…");
             for (;;) {
-              const txs =
-                queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
-              const pricesData =
-                queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
+              const txs = queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
+              const pricesData = queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
               const holdings = computeHoldings(txs, pricesData?.prices ?? {});
               const value = computeTotals(holdings).valueUsd;
               if (holdings.length === 0 || value != null || cancelled || remaining() <= 0) {
@@ -279,10 +272,8 @@ function RootComponent() {
           if (!cancelled && remaining() > 0) {
             setBootStatus("Đang tải biểu đồ và tính lãi/lỗ…");
             for (;;) {
-              const txs =
-                queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
-              const pricesData =
-                queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
+              const txs = queryClient.getQueryData<Tx[]>(transactionsQuery(userId).queryKey) ?? [];
+              const pricesData = queryClient.getQueryData<PricesResult>(pricesQuery.queryKey);
               const holdings = computeHoldings(txs, pricesData?.prices ?? {});
               const value = computeTotals(holdings).valueUsd;
               if (holdings.length === 0 || cancelled || remaining() <= 0) break;
@@ -296,7 +287,9 @@ function RootComponent() {
                 continue;
               }
               const options = portfolioHistoryQuery(
-                holdings.map((h) => h.symbol),
+                // Nạp cả đồng đã bán/đổi hết (không còn trong holdings)
+                // để chart 1M tính được sau khi swap toàn bộ một token.
+                [...new Set([...holdings.map((h) => h.symbol), ...txs.map((t) => t.symbol)])],
                 pricesData?.prices,
                 "1M",
               );

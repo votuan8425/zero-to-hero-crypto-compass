@@ -57,7 +57,8 @@ export function parseSjcGold(json: unknown): MetalQuote | null {
 
 /** Dự phòng khi trang SJC chặn: bảng giá PNJ có dòng "Vàng miếng SJC", đơn vị nghìn đồng / chỉ. */
 export function parsePnjSjc(json: unknown): MetalQuote | null {
-  const rows = (json as { data?: { masp?: string; giaban?: number; giamua?: number }[] })?.data ?? [];
+  const rows =
+    (json as { data?: { masp?: string; giaban?: number; giamua?: number }[] })?.data ?? [];
   const r = rows.find((x) => x.masp === "SJC");
   const sell = Number(r?.giaban);
   const buy = Number(r?.giamua);
@@ -113,6 +114,17 @@ export function metalAskPerUnit(
   if (!quote || quote.askVnd == null || quote.askVnd <= 0) return null;
   if (symbol === "PAXG" && unit === "lượng") return quote.askVnd * CHI_PER_LUONG;
   return quote.askVnd;
+}
+
+/** Giá mua vào (bid) theo đơn vị đã chọn: dùng khi bán vàng/bạc (cửa hàng mua lại). */
+export function metalBidPerUnit(
+  quote: PriceQuote | undefined,
+  symbol: string,
+  unit: "chỉ" | "lượng",
+): number | null {
+  if (!quote || quote.vnd == null || quote.vnd <= 0) return null;
+  if (symbol === "PAXG" && unit === "lượng") return quote.vnd * CHI_PER_LUONG;
+  return quote.vnd;
 }
 
 /**

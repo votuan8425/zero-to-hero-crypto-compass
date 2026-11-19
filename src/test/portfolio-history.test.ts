@@ -26,8 +26,7 @@ const tx = (p: Partial<Tx>): Tx => ({
 });
 
 /** Nến ngày: giá đóng cửa tăng 100 → 110 → 120 … */
-const daily = (closes: number[]) =>
-  closes.map((c, i) => ({ t: t0 + i * DAY, c }));
+const daily = (closes: number[]) => closes.map((c, i) => ({ t: t0 + i * DAY, c }));
 
 /** Nến giờ bắt đầu từ mốc cho trước. */
 const hourly = (closes: number[], start: number) =>
@@ -70,7 +69,7 @@ describe("lịch sử giá trị danh mục", () => {
     expect(h.startValue).toBe(100);
     expect(h.deposits).toBe(90);
     expect(h.pnl).toBe(-30);
-    expect(h.pnlPct).toBeCloseTo(-30 / 190 * 100, 6);
+    expect(h.pnlPct).toBeCloseTo((-30 / 190) * 100, 6);
   });
 
   it("chưa mua gì đầu kỳ thì đường phẳng ở 0 từ đầu kỳ tới lần mua đầu", () => {
@@ -169,9 +168,7 @@ describe("lịch sử giá trị danh mục", () => {
 
   it("chưa mua gì hoặc không có giá thì rỗng", () => {
     expect(computePortfolioHistory([], { BTC: daily([100]) }, t0, t0).points).toEqual([]);
-    expect(
-      computePortfolioHistory([tx({})], {}, t0, t0 + DAY).points,
-    ).toEqual([]);
+    expect(computePortfolioHistory([tx({})], {}, t0, t0 + DAY).points).toEqual([]);
   });
 
   it("một đồng đang nắm mà không có nến thì rỗng (không vẽ chart thiếu đồng đó)", () => {
@@ -289,5 +286,75 @@ describe("neo chuỗi giá thế giới về giá trong nước", () => {
       { t: t0 + DAY, c: 110 },
     ];
     expect(rescaleSeriesToCurrent(s, null)).toBe(s);
+  });
+});
+
+describe("bán / đổi token trong kỳ", () => {
+  it("bán một phần: số lượng giảm, tiền bán thu về được cộng lại khi tính PNL", () => {
+    // Mua 1 BTC ngày 1 giá 100. Bán 0,5 BTC ngày 3 giá 120 (thu 60).
+    // Giá đóng cửa: 100, 110, 120, 130.
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, price_usd: 100, tx_date: "2026-11-01" }),
+        tx({ symbol: "BTC", quantity: -0.5, price_usd: 120, tx_date: "2026-11-03" }),
+      ],
+      { BTC: daily([100, 110, 120, 130]) },
+      t0,
+      t0 + 3 * DAY,
+    );
+    // Ngày 1: 1×100; ngày 2: 1×110; ngày 3: 0,5×120; ngày 4: 0,5×130.
+    expect(h.points.map((p) => p.value)).toEqual([100, 110, 60, 65]);
+    expect(h.startValue).toBe(100);
+    expect(h.endValue).toBe(65);
+    expect(h.deposits).toBe(0);
+    expect(h.withdrawals).toBe(60);
+    // PNL = 65 − 100 − 0 + 60 = 25 (lãi 10 từ bán + lãi 15 từ 0,5 còn lại).
+    expect(h.pnl).toBe(25);
+    expect(h.pnlPct).toBeCloseTo(25, 6);
+  });
+
+  it("đổi toàn bộ 1 token sang token khác: chart không biến mất, PNL đúng", () => {
+    // Mua 1 BTC ngày 1 giá 100. Ngày 3 đổi 100% BTC → 2 ETH (BTC 120, ETH 60).
+    // Giá BTC: 100, 110, 120, 130. Giá ETH: 50, 55, 60, 70.
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, price_usd: 100, tx_date: "2026-11-01" }),
+        tx({ symbol: "BTC", quantity: -1, price_usd: 120, tx_date: "2026-11-03" }),
+        tx({ symbol: "ETH", quantity: 2, price_usd: 60, tx_date: "2026-11-03" }),
+      ],
+      { BTC: daily([100, 110, 120, 130]), ETH: daily([50, 55, 60, 70]) },
+      t0,
+      t0 + 3 * DAY,
+    );
+    expect(h.points.length).toBeGreaterThan(0);
+    // Ngày 1: 1×100; ngày 2: 1×110; ngày 3: 2×60; ngày 4: 2×70.
+    expect(h.points.map((p) => p.value)).toEqual([100, 110, 120, 140]);
+    expect(h.startValue).toBe(100);
+    expect(h.endValue).toBe(140);
+    expect(h.deposits).toBe(120);
+    expect(h.withdrawals).toBe(120);
+    // PNL = 140 − 100 − 120 + 120 = 40 (lãi 20 từ BTC + lãi 20 từ ETH).
+    // % = 40 / (100 + 120) = 18,18% (vốn = giá trị đầu kỳ + tiền mua thêm).
+    expect(h.pnl).toBe(40);
+    expect(h.pnlPct).toBeCloseTo((40 / 220) * 100, 6);
+  });
+
+  it("đồng đã bán hết trước đầu kỳ và không có giao dịch trong kỳ thì không cần nến", () => {
+    // Mua 1 BTC ngày 1, bán hết ngày 2 (trước đầu kỳ ngày 3) — kỳ bắt đầu ngày 3.
+    // Lần mua ETH ngày 3 rơi đúng ngày đầu kỳ nên tính vào giá trị đầu kỳ
+    // (ngày giao dịch không có giờ — hành vi biên đã có sẵn).
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, price_usd: 100, tx_date: "2026-11-01" }),
+        tx({ symbol: "BTC", quantity: -1, price_usd: 110, tx_date: "2026-11-02" }),
+        tx({ symbol: "ETH", quantity: 1, price_usd: 50, tx_date: "2026-11-03" }),
+      ],
+      { ETH: daily([50, 55, 60, 65, 70]) },
+      t0 + 2 * DAY,
+      t0 + 4 * DAY,
+    );
+    expect(h.points.length).toBeGreaterThan(0);
+    expect(h.points.map((p) => p.value)).toEqual([60, 65, 70]);
+    expect(h.startValue).toBe(60);
   });
 });

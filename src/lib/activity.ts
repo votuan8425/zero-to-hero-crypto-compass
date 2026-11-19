@@ -59,9 +59,9 @@ export function activityDetail(
     case "swap":
       return pct ? `${pct} ${s} sang ${to}` : `${s} sang ${to}`;
     case "update":
-      return a.meta?.allocation ?? "";
+      return a.meta?.allocation ?? "—";
     case "message":
-      return "";
+      return "—";
   }
 }
 

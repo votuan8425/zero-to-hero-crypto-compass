@@ -92,7 +92,15 @@ function HomePage() {
   const [period, setPeriod] = useState<HistoryPeriod>("1M");
   const [hovered, setHovered] = useState<HistoryPoint | null>(null);
   const heldSymbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
-  const historyQuery = usePortfolioHistory(heldSymbols, prices.data?.prices, period);
+  // Nến cho chart phải nạp cả đồng đã bán/đổi hết trong kỳ (không còn
+  // trong holdings) — nếu không, hàm tính lịch sử thiếu nến của đồng đó
+  // và trả rỗng, chart biến mất sau khi swap toàn bộ một token.
+  const historySymbols = useMemo(() => {
+    const syms = new Set(heldSymbols);
+    for (const t of txs.data ?? []) syms.add(t.symbol);
+    return [...syms];
+  }, [heldSymbols, txs.data]);
+  const historyQuery = usePortfolioHistory(historySymbols, prices.data?.prices, period);
   const history = useMemo(() => {
     if (!historyQuery.data) return null;
     const toMs = Date.now();
@@ -169,9 +177,7 @@ function HomePage() {
                 kỳ — dòng trống giữ chỗ khi không có, để chiều cao hero không
                 đổi khi đổi kỳ và trang dưới không bị giật. */}
             <div className="mt-2 text-sm">
-              <div className="text-muted-foreground">
-                PNL trong {historyPeriodLabel(period)}
-              </div>
+              <div className="text-muted-foreground">PNL trong {historyPeriodLabel(period)}</div>
               {history && history.points.length > 0 ? (
                 <PnlText
                   value={history.pnl}
@@ -291,7 +297,7 @@ function HomePage() {
         <Stat
           icon={<Layers className="h-3.5 w-3.5" />}
           label="Số lần mua"
-          value={txs.data?.length ?? 0}
+          value={txs.data?.filter((t) => t.quantity > 0).length ?? 0}
         />
         <Stat
           icon={<Coins className="h-3.5 w-3.5" />}
@@ -336,42 +342,44 @@ function HomePage() {
                   : h.priceUsd != null
                     ? money(h.priceUsd)
                     : null;
-                const value = unit ? fmt(h.valueVnd ?? toVnd(h.valueUsd)) : money(h.valueUsd ?? null);
+                const value = unit
+                  ? fmt(h.valueVnd ?? toVnd(h.valueUsd))
+                  : money(h.valueUsd ?? null);
                 const pnl = unit ? (h.pnlVnd ?? toVnd(h.pnlUsd)) : h.pnlUsd;
                 const pnlText =
                   pnl == null
                     ? "Chưa có giá"
                     : `${pnl >= 0 ? "+" : ""}${unit ? fmt(pnl, true) : money(pnl, true)} (${formatPercent(h.pnlPct, 1, true)})`;
                 return (
-                <li key={h.symbol} className="flex items-center gap-3 px-5 py-3.5">
-                  <CoinLogo symbol={h.symbol} size={36} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-semibold">{displaySymbol(h.symbol)}</span>
-                      {!unit && (
-                        <span className="truncate text-xs text-muted-foreground">{h.name}</span>
-                      )}
+                  <li key={h.symbol} className="flex items-center gap-3 px-5 py-3.5">
+                    <CoinLogo symbol={h.symbol} size={36} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-semibold">{displaySymbol(h.symbol)}</span>
+                        {!unit && (
+                          <span className="truncate text-xs text-muted-foreground">{h.name}</span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
+                          Avg {avg}
+                          {unit ? ` / ${unit}` : ""}
+                        </span>
+                        {cur != null && cur !== "—" && (
+                          <span className="num text-xs text-muted-foreground">Hiện tại {cur}</span>
+                        )}
+                      </div>
+                      <div className="num mt-1 text-xs text-muted-foreground">
+                        {formatNumber(h.quantity)} {quantityUnit(h.symbol)} · {h.purchases} lần mua
+                      </div>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="num inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
-                        Avg {avg}
-                        {unit ? ` / ${unit}` : ""}
-                      </span>
-                      {cur != null && cur !== "—" && (
-                        <span className="num text-xs text-muted-foreground">Hiện tại {cur}</span>
-                      )}
+                    <div className="text-right">
+                      <div className="num font-semibold">{value}</div>
+                      <PnlText value={pnl} className="text-xs">
+                        {pnlText}
+                      </PnlText>
                     </div>
-                    <div className="num mt-1 text-xs text-muted-foreground">
-                      {formatNumber(h.quantity)} {quantityUnit(h.symbol)} · {h.purchases} lần mua
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="num font-semibold">{value}</div>
-                    <PnlText value={pnl} className="text-xs">
-                      {pnlText}
-                    </PnlText>
-                  </div>
-                </li>
+                  </li>
                 );
               })}
             </ul>
@@ -464,37 +472,37 @@ function MarketPrices({
                         </div>
                       )}
                     </div>
-                  <div className="text-right">
-                    <PnlText value={q?.change24h ?? null} className="text-sm font-semibold">
-                      {q?.change24h != null ? formatPercent(q.change24h, 2, true) : "—"}
-                    </PnlText>
-                    <div className="text-xs text-muted-foreground">24 giờ</div>
-                  </div>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    aria-label={isFav ? `Bỏ ghim ${c.name}` : `Ghim ${c.name} lên đầu`}
-                    aria-pressed={isFav}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar(c.symbol);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
+                    <div className="text-right">
+                      <PnlText value={q?.change24h ?? null} className="text-sm font-semibold">
+                        {q?.change24h != null ? formatPercent(q.change24h, 2, true) : "—"}
+                      </PnlText>
+                      <div className="text-xs text-muted-foreground">24 giờ</div>
+                    </div>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={isFav ? `Bỏ ghim ${c.name}` : `Ghim ${c.name} lên đầu`}
+                      aria-pressed={isFav}
+                      onClick={(e) => {
                         e.stopPropagation();
                         onToggleStar(c.symbol);
-                      }
-                    }}
-                    className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full transition-colors hover:bg-surface-raised"
-                  >
-                    <Star
-                      className={cn(
-                        "h-5 w-5",
-                        isFav ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
-                      )}
-                    />
-                  </span>
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onToggleStar(c.symbol);
+                        }
+                      }}
+                      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full transition-colors hover:bg-surface-raised"
+                    >
+                      <Star
+                        className={cn(
+                          "h-5 w-5",
+                          isFav ? "fill-amber-400 text-amber-400" : "text-muted-foreground",
+                        )}
+                      />
+                    </span>
                   </div>
                   {c.unit != null && (
                     <div className="num mt-2 whitespace-nowrap pl-[48px] text-[11px]">
@@ -511,9 +519,7 @@ function MarketPrices({
                           </span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">
-                          {formatNumber(q.vnd, 0)} vnđ
-                        </span>
+                        <span className="text-muted-foreground">{formatNumber(q.vnd, 0)} vnđ</span>
                       )}
                     </div>
                   )}

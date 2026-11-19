@@ -106,9 +106,12 @@ function monthIndex(key: string): number {
  * đếm theo tháng: tháng nào cũng có ít nhất 1 lần mua thì nối chuỗi.
  */
 export function computeMonthlyStreak(txs: readonly Tx[], now: Date = new Date()): MonthlyStreak {
-  const keys = [...new Set(txs.map((t) => monthKeyOfTx(t)))].sort();
+  // Chỉ đếm lần MUA — 2 chân bán+mua của 1 lần đổi không phải 2 lần mua,
+  // tháng chỉ có đổi thì không nối dài chuỗi tích lũy.
+  const buys = txs.filter((t) => t.quantity > 0);
+  const keys = [...new Set(buys.map((t) => monthKeyOfTx(t)))].sort();
   const currentKey = monthKeyOf(now);
-  const currentMonthBuys = txs.filter((t) => monthKeyOfTx(t) === currentKey).length;
+  const currentMonthBuys = buys.filter((t) => monthKeyOfTx(t) === currentKey).length;
   if (keys.length === 0) {
     return {
       months: 0,

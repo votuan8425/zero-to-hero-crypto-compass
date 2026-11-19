@@ -125,7 +125,15 @@ function AccumulatePage() {
 
   const money = (usd: number | null) =>
     formatMoney(convertUsd(usd, currency, usdVnd, usdKrw), currency);
-  const avg = list.length ? totals.investedUsd / list.length : null;
+  // "Avg mỗi lần" chỉ tính trên lần MUA — 2 chân bán+mua của 1 lần đổi
+  // không phải 2 lần mua (trước đây đếm cả bán nên Avg tụt và số lần tăng ảo).
+  const buyList = useMemo(() => list.filter((t) => t.quantity > 0), [list]);
+  const buyCost = useMemo(
+    () =>
+      buyList.reduce((s, t) => s + t.quantity * Number(t.price_usd) + Number(t.fee_usd || 0), 0),
+    [buyList],
+  );
+  const avg = buyList.length ? buyCost / buyList.length : null;
 
   async function confirmDelete() {
     if (!toDelete) return;
@@ -151,7 +159,10 @@ function AccumulatePage() {
             <Button
               variant="surface"
               onClick={() => setSwapOpen(true)}
-              disabled={holdings.length === 0}
+              disabled={!holdings.some((h) => h.quantity > 0)}
+              title={
+                holdings.some((h) => h.quantity > 0) ? undefined : "Bạn chưa nắm token nào để đổi"
+              }
             >
               <ArrowRightLeft /> Chuyển đổi
             </Button>
@@ -311,7 +322,7 @@ function AccumulatePage() {
               icon={<Clock className="h-3.5 w-3.5" />}
               label="Avg mỗi lần"
               value={money(avg)}
-              hint={`${list.length} lần mua`}
+              hint={`${buyList.length} lần mua`}
             />
             <Stat
               icon={<CalendarDays className="h-3.5 w-3.5" />}
@@ -471,7 +482,7 @@ function AccumulatePage() {
         holdings={holdings}
       />
 
-      <SwapDialog open={swapOpen} onOpenChange={setSwapOpen} holdings={holdings} />
+      <SwapDialog open={swapOpen} onOpenChange={setSwapOpen} holdings={holdings} txs={list} />
 
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
         <AlertDialogContent>
@@ -480,6 +491,8 @@ function AccumulatePage() {
             <AlertDialogDescription>
               {toDelete &&
                 `${formatNumber(toDelete.quantity)} ${quantityUnit(toDelete.symbol)} ngày ${formatDate(toDelete.tx_date)}. `}
+              {toDelete?.note?.includes("Swap ") &&
+                "Đây là một chân của một lần đổi token — xoá riêng chân này sẽ làm lệch danh mục (chân còn lại vẫn ở lại). Muốn huỷ cả lần đổi thì xoá cả hai chân. "}
               Thao tác này sẽ xoá trên mọi thiết bị và không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>

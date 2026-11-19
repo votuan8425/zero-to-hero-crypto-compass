@@ -25,7 +25,7 @@ import { COINS, displaySymbol, getCoin } from "@/lib/coins";
 import { saveTransaction } from "@/lib/data";
 import { formatMoney, formatNumber, todayKey } from "@/lib/format";
 import { metalAskPerUnit, normalizeMetalPurchase } from "@/lib/metals";
-import type { Holding } from "@/lib/portfolio";
+import type { Holding, Tx } from "@/lib/portfolio";
 import { actionPercent, roundActionPercent, swapRate } from "@/lib/swap";
 import { logActivity } from "@/lib/activity";
 import { usePrices } from "@/hooks/use-app-data";
@@ -44,11 +44,14 @@ export function SwapDialog({
   open,
   onOpenChange,
   holdings,
+  txs,
   defaultFrom,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   holdings: Holding[];
+  /** Toàn bộ giao dịch — để chặn ngày đổi trước lần mua đầu của token nguồn. */
+  txs: Tx[];
   defaultFrom?: string | null;
 }) {
   const user = useUser();
@@ -57,6 +60,15 @@ export function SwapDialog({
   const usdVnd = prices.data?.usdVnd ?? null;
 
   const heldSymbols = useMemo(() => holdings.filter((h) => h.quantity > 0), [holdings]);
+  // Ngày mua đầu tiên của token nguồn — ngày đổi không được trước ngày này,
+  // nếu không lệnh bán chạy trước lần mua, avg cost và vốn tính sai lặng.
+  const firstBuyDate = useMemo(() => {
+    const dates = txs
+      .filter((t) => t.symbol === from && t.quantity > 0)
+      .map((t) => t.tx_date)
+      .sort();
+    return dates[0] ?? null;
+  }, [txs, from]);
   const [from, setFrom] = useState(defaultFrom ?? heldSymbols[0]?.symbol ?? "BTC");
   const [amount, setAmount] = useState("");
   const [to, setTo] = useState("USDT");
@@ -140,7 +152,13 @@ export function SwapDialog({
     setReceiveOverride(null);
   }, [from, to, amount, toUnit]);
 
-  const receiveStr = receiveOverride ?? (estimate != null ? fmtReceive(estimate) : "");
+  // Xoá trắng ô nhận thì quay về ước tính (không giữ ô trống khoá nút).
+  const receiveStr =
+    receiveOverride != null && receiveOverride.trim() !== ""
+      ? receiveOverride
+      : estimate != null
+        ? fmtReceive(estimate)
+        : "";
   const receiveNum = parseNum(receiveStr);
   /** % số A đang nắm sẽ đổi — đây là % ghi vào nhật ký hành động. */
   const pct = actionPercent(amountNum, heldFrom);
@@ -169,7 +187,8 @@ export function SwapDialog({
     Number.isFinite(receiveNum) &&
     receiveNum > 0 &&
     buyPriceUsdPerDisplayActual != null &&
-    date <= todayKey();
+    date <= todayKey() &&
+    (firstBuyDate == null || date >= firstBuyDate);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -180,6 +199,12 @@ export function SwapDialog({
     }
     if (date > todayKey()) {
       toast.error("Ngày đổi không thể ở tương lai.");
+      return;
+    }
+    if (firstBuyDate != null && date < firstBuyDate) {
+      toast.error(
+        `Ngày đổi không thể trước lần mua đầu tiên của ${displaySymbol(from)} (${firstBuyDate}).`,
+      );
       return;
     }
     setBusy(true);
@@ -229,6 +254,7 @@ export function SwapDialog({
         toSymbol: to,
         pct: pctRounded,
       });
+      await qc.invalidateQueries({ queryKey: ["admin-activities", user.id] });
       toast.success(
         sellStatus === "queued" || buyStatus === "queued"
           ? "Đã lưu tạm trên thiết bị. Sẽ đồng bộ khi có mạng."
@@ -390,7 +416,9 @@ export function SwapDialog({
             <p className="text-xs text-muted-foreground">
               {rate != null && Number.isFinite(amountNum) && amountNum > 0
                 ? `Ước tính: 1 ${displaySymbol(from)} = ${formatNumber(rate)} ${displaySymbol(to)} → nhận khoảng ${estimate != null ? formatNumber(estimate) : "—"} ${displaySymbol(to)}. `
-                : "Chọn đủ 2 token và nhập số lượng để xem ước tính. "}
+                : Number.isFinite(amountNum) && amountNum > 0 && from !== to
+                  ? "Chưa có giá live của một trong hai token nên chưa tính được ước tính — thử lại khi có mạng. "
+                  : "Chọn đủ 2 token và nhập số lượng để xem ước tính. "}
               Thực tế trên sàn có thể nhận ít hơn do phí và trượt giá — sửa lại số này cho khớp với
               số thật trên sàn.
             </p>
@@ -404,6 +432,7 @@ export function SwapDialog({
                 type="date"
                 required
                 value={date}
+                min={firstBuyDate ?? undefined}
                 max={todayKey()}
                 onChange={(e) => setDate(e.target.value)}
                 className="h-11"

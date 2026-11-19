@@ -21,15 +21,14 @@ function clean(list: readonly string[]): string[] {
   return out.slice(0, MAX_FAVORITES);
 }
 
-/** Đọc danh sách yêu thích; chưa lưu bao giờ thì trả về mặc định BTC/ETH/Vàng. */
+/** Đọc danh sách yêu thích; chưa lưu bao giờ thì trả về mặc định BTC/ETH/Vàng. Đã lưu rỗng (bỏ ghim hết) thì trả về rỗng, không tự về mặc định. */
 export function loadFavorites(): string[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [...DEFAULT_FAVORITES];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [...DEFAULT_FAVORITES];
-    const list = clean(parsed.map(String));
-    return list.length > 0 ? list : [...DEFAULT_FAVORITES];
+    return clean(parsed.map(String));
   } catch {
     return [...DEFAULT_FAVORITES];
   }
