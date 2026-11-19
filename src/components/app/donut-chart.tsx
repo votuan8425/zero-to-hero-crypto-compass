@@ -143,7 +143,7 @@ export function DonutChart({
           </div>
           <ul className="divide-y divide-border">
             {data.map((d, i) => (
-              <li key={d.symbol} className="space-y-1.5 py-2.5">
+              <li key={d.symbol} className="py-2.5">
                 <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span
@@ -169,15 +169,6 @@ export function DonutChart({
                       {formatPercent(d.percent)}
                     </span>
                   )}
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, d.percent))}%`,
-                      background: CHART_COLORS[i % CHART_COLORS.length],
-                    }}
-                  />
                 </div>
               </li>
             ))}
