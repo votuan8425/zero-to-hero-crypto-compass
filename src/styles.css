@@ -294,3 +294,12 @@ html.theme-anim *::after {
     fill 0.35s ease,
     stroke 0.35s ease !important;
 }
+
+/* Biểu đồ tròn: Recharts vẽ mỗi lát cắt với tabIndex=-1 nên bấm vào lát nào
+ * thì trình duyệt focus nó và vẽ viền trắng hình chữ nhật quanh hộp bao của
+ * lát đó (không ôm theo hình lát cắt, trông như bị lỗi). Tắt viền focus này —
+ * lát đang chọn đã được thể hiện bằng thông tin ở giữa biểu đồ. */
+.recharts-pie-sector:focus,
+.recharts-pie-sector *:focus {
+  outline: none;
+}

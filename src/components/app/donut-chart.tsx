@@ -1,4 +1,5 @@
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { displaySymbol, coinName, getCoin } from "@/lib/coins";
 import { formatPercent } from "@/lib/format";
 import { CoinLogo } from "./coin-logo";
@@ -25,6 +26,11 @@ export function DonutChart({
   height?: number;
 }) {
   const data = items.filter((i) => i.percent > 0);
+  // Bấm một lát cắt thì hiện thông tin của nó ở giữa biểu đồ (thay cho
+  // tooltip nổi của Recharts — tooltip đó luôn rơi vào giữa donut và đè lên
+  // chữ ở tâm, trông như bị lỗi). Bấm lại lát đó thì trở về mặc định.
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const active = activeIndex != null ? data[activeIndex] : null;
   return (
     <div className={showLegend ? "grid items-center gap-6 sm:grid-cols-[minmax(0,240px)_1fr]" : ""}>
       <div className="relative" style={{ height }}>
@@ -39,40 +45,38 @@ export function DonutChart({
               paddingAngle={data.length > 1 ? 2 : 0}
               stroke="none"
               isAnimationActive
+              onClick={(_, index) => setActiveIndex((prev) => (prev === index ? null : index))}
             >
               {data.map((d, i) => (
-                <Cell key={d.symbol} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell
+                  key={d.symbol}
+                  fill={CHART_COLORS[i % CHART_COLORS.length]}
+                  opacity={activeIndex == null || activeIndex === i ? 1 : 0.35}
+                />
               ))}
             </Pie>
-            <Tooltip
-              cursor={false}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const p = payload[0]?.payload as DonutItem | undefined;
-                if (!p) return null;
-                return (
-                  <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
-                    <div className="font-semibold">
-                      {coinName(p.symbol, p.name)}
-                      {getCoin(p.symbol)?.unit ? "" : ` (${displaySymbol(p.symbol)})`}
-                    </div>
-                    <div className="num text-primary">{formatPercent(p.percent)}</div>
-                  </div>
-                );
-              }}
-            />
           </PieChart>
         </ResponsiveContainer>
-        {(centerLabel || centerValue) && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-            {centerValue && <div className="num text-xl font-semibold">{centerValue}</div>}
-            {centerLabel && (
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                {centerLabel}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          {active ? (
+            <>
+              <div className="num text-xl font-semibold text-primary">{formatPercent(active.percent)}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {coinName(active.symbol, active.name)}
+                {getCoin(active.symbol)?.unit ? "" : ` (${displaySymbol(active.symbol)})`}
               </div>
-            )}
-          </div>
-        )}
+            </>
+          ) : (
+            <>
+              {centerValue && <div className="num text-xl font-semibold">{centerValue}</div>}
+              {centerLabel && (
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {centerLabel}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
       {showLegend && (
         <ul className="space-y-2.5">
