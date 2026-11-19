@@ -15,66 +15,45 @@ export interface DonutItem {
   pnlPct?: number | null;
 }
 
-const RADIAN = Math.PI / 180;
-/** Lát nhỏ hơn 8% thì chữ % không đủ chỗ trên vành — để trống, xem % ở bảng dưới. */
-const MIN_LABELED_PERCENT = 8;
+/** Lát nhỏ hơn 5% thì không ghi nhãn ngoài (dễ chồng lên nhau) — xem ở bảng dưới. */
+const MIN_LABELED_PERCENT = 5;
 
 /**
- * Ghi % lên giữa vành của từng lát cắt.
+ * Nhãn "Tên %" đặt BÊN NGOÀI vòng tròn, nối với lát bằng đường kẻ màu
+ * của lát (Recharts vẽ sẵn qua prop labelLine; hàm này chỉ vẽ chữ tại
+ * điểm cuối của đường kẻ mà Recharts truyền qua x/y/textAnchor).
  *
- * BẪY: Recharts truyền cho label prop `percent` là PHÂN SỐ (0–1) theo
- * tài liệu, NHƯNG khi dataKey="percent" thì lúc dựng sector nó spread
- * data item gốc SAU phân số đã tính, nên `percent` bị ghi đè thành giá
- * trị thô 0–100 (80,93). Dùng `percent * 100` sẽ ra 8093 → hiện "8.093%"
- * (dấu chấm là phân cách hàng nghìn của vi-VN). Vì vậy dùng `value` —
- * giá trị thô của dataKey (0–100) — và KHÔNG nhân 100 nữa.
+ * BẪY: khi dataKey="percent", prop `percent` của sector là giá trị thô
+ * 0–100 (data item gốc spread đè lên phân số đã tính), KHÔNG phải phân
+ * số 0–1. Vì vậy dùng `value` (giá trị thô của dataKey, 0–100) và KHÔNG
+ * nhân 100 — nhân thêm sẽ ra 8093 → hiện "8.093%".
  */
-function renderSlicePercent(props: {
-  cx?: number;
-  cy?: number;
-  midAngle?: number;
-  innerRadius?: number;
-  outerRadius?: number;
+function renderOutsideLabel(props: {
+  x?: number;
+  y?: number;
+  textAnchor?: string;
   value?: number;
-  percent?: number;
+  payload?: DonutItem;
+  fill?: string;
 }) {
-  const {
-    cx = 0,
-    cy = 0,
-    midAngle = 0,
-    innerRadius = 0,
-    outerRadius = 0,
-    value,
-    percent,
-  } = props;
-  // value là % vị thế 0–100. Dự phòng khi value thiếu: percent có thể là
-  // phân số (≤ 1) hoặc giá trị thô (> 1).
-  const pct =
-    value != null && Number.isFinite(value)
-      ? value
-      : percent != null && Number.isFinite(percent)
-        ? percent <= 1
-          ? percent * 100
-          : percent
-        : NaN;
+  const { x = 0, y = 0, textAnchor = "middle", value, payload, fill } = props;
+  const pct = value != null && Number.isFinite(value) ? value : NaN;
   if (!Number.isFinite(pct) || pct < MIN_LABELED_PERCENT) return null;
-  const radius = innerRadius + (outerRadius - innerRadius) / 2;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const symbol = payload?.symbol ?? "";
   return (
     <text
       x={x}
       y={y}
-      textAnchor="middle"
+      textAnchor={textAnchor as "start" | "middle" | "end"}
       dominantBaseline="central"
       fontSize={12}
-      fontWeight={700}
-      fill="#1f2937"
-      stroke="rgba(255,255,255,0.9)"
-      strokeWidth={3}
-      paintOrder="stroke"
+      style={{ fill: "var(--foreground)" }}
     >
-      {formatPercent(pct)}
+      <tspan fontWeight={600}>{displaySymbol(symbol)}</tspan>
+      <tspan fontWeight={700} style={{ fill: fill ?? "var(--foreground)" }}>
+        {" "}
+        {formatPercent(pct)}
+      </tspan>
     </text>
   );
 }
@@ -101,24 +80,24 @@ export function DonutChart({
   // Chỉ hiện cột Lãi/Lỗ khi có ít nhất một token có số liệu (danh mục từ
   // ảnh chụp chỉ có % vị thế, không có lãi/lỗ từng token).
   const showPnl = data.some((d) => d.pnlPct != null);
-  const cols = showPnl
-    ? "grid-cols-[minmax(0,1fr)_72px_72px]"
-    : "grid-cols-[minmax(0,1fr)_72px]";
   return (
     <div className="space-y-4">
-      <div className="relative mx-auto w-full max-w-[280px]" style={{ height }}>
+      {/* Vòng tròn nhỏ lại để chừa chỗ cho nhãn ngoài hai bên (nhãn dài
+          "ETH 80,95%" cần ~70px mỗi bên). */}
+      <div className="relative mx-auto w-full max-w-[440px]" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               dataKey="percent"
               nameKey="symbol"
-              innerRadius="68%"
-              outerRadius="100%"
+              innerRadius="48%"
+              outerRadius="68%"
               paddingAngle={data.length > 1 ? 2 : 0}
               stroke="none"
               isAnimationActive
-              label={renderSlicePercent}
+              label={renderOutsideLabel}
+              labelLine
               onClick={(_, index) => setActiveIndex((prev) => (prev === index ? null : index))}
             >
               {data.map((d, i) => (
@@ -152,19 +131,20 @@ export function DonutChart({
           )}
         </div>
       </div>
+      {/* Bảng giải thích bên dưới: % vị thế đã nằm trên đồ thị (nhãn
+          ngoài) nên bảng KHÔNG lặp lại con số đó nữa — bảng chỉ giải
+          thích lãi/lỗ từng token. Chưa có lãi/lỗ (danh mục từ ảnh chụp)
+          thì bảng hiện % vị thế để bù cho nhãn ngoài có thể thiếu. */}
       {showLegend && (
         <div>
-          <div
-            className={`grid ${cols} items-center gap-3 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground`}
-          >
+          <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-3 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <span>Token</span>
-            <span className="text-right">Vị thế</span>
-            {showPnl && <span className="text-right">Lãi / Lỗ</span>}
+            <span className="text-right">{showPnl ? "Lãi / Lỗ" : "Vị thế"}</span>
           </div>
           <ul className="divide-y divide-border">
             {data.map((d, i) => (
               <li key={d.symbol} className="space-y-1.5 py-2.5">
-                <div className={`grid ${cols} items-center gap-3`}>
+                <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -180,13 +160,14 @@ export function DonutChart({
                       )}
                     </span>
                   </div>
-                  <span className="num text-right text-base font-bold">
-                    {formatPercent(d.percent)}
-                  </span>
-                  {showPnl && (
+                  {showPnl ? (
                     <PnlText value={d.pnlPct ?? null} className="text-right text-base font-bold">
                       {d.pnlPct != null ? formatPercent(d.pnlPct, 2, true) : "—"}
                     </PnlText>
+                  ) : (
+                    <span className="num text-right text-base font-bold">
+                      {formatPercent(d.percent)}
+                    </span>
                   )}
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">

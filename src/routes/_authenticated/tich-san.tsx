@@ -339,7 +339,7 @@ function AccumulatePage() {
                 items={allocation.slices}
                 centerValue={String(holdings.length)}
                 centerLabel="loại coin"
-                height={180}
+                height={220}
               />
             </section>
           )}
