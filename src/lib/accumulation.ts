@@ -34,7 +34,8 @@ export function groupByMonth(txs: readonly Tx[]): MonthGroup[] {
       investedUsd: 0,
     };
     g.txs.push(t);
-    g.buys += 1;
+    // Chỉ lần mua mới tính vào "lần mua"; bán/đổi (số lượng âm) không tính.
+    if (Number(t.quantity) > 0) g.buys += 1;
     g.investedUsd += Number(t.quantity) * Number(t.price_usd) + Number(t.fee_usd || 0);
     map.set(key, g);
   }
@@ -50,14 +51,15 @@ export function groupByMonth(txs: readonly Tx[]): MonthGroup[] {
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
   if (!y || !m) return key;
-  const name = new Intl.DateTimeFormat("vi-VN", { month: "long" }).format(
-    new Date(y, m - 1, 1),
-  );
+  const name = new Intl.DateTimeFormat("vi-VN", { month: "long" }).format(new Date(y, m - 1, 1));
   return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
 }
 
 /** Tổng vốn + số lần mua của một năm (từ các nhóm tháng). */
-export function yearTotals(groups: readonly MonthGroup[], year: number): {
+export function yearTotals(
+  groups: readonly MonthGroup[],
+  year: number,
+): {
   buys: number;
   investedUsd: number;
 } {
@@ -103,10 +105,7 @@ function monthIndex(key: string): number {
  * Chuỗi tích lũy theo tháng — tích sản không phải chuyện của ngày nên chuỗi
  * đếm theo tháng: tháng nào cũng có ít nhất 1 lần mua thì nối chuỗi.
  */
-export function computeMonthlyStreak(
-  txs: readonly Tx[],
-  now: Date = new Date(),
-): MonthlyStreak {
+export function computeMonthlyStreak(txs: readonly Tx[], now: Date = new Date()): MonthlyStreak {
   const keys = [...new Set(txs.map((t) => monthKeyOfTx(t)))].sort();
   const currentKey = monthKeyOf(now);
   const currentMonthBuys = txs.filter((t) => monthKeyOfTx(t) === currentKey).length;

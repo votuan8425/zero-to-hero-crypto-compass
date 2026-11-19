@@ -55,6 +55,86 @@ describe("portfolio math", () => {
   });
 });
 
+describe("bán / swap giữ đúng giá mua trung bình (avg cost)", () => {
+  it("bán một phần ở giá cao hơn: vốn còn lại = số lượng còn × avg cost", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 10, price_usd: 100 }),
+      tx({ quantity: -5, price_usd: 120, tx_date: "2026-11-11" }),
+    ]);
+    expect(btc?.quantity).toBe(5);
+    expect(btc?.investedUsd).toBe(500);
+    expect(btc?.avgCostUsd).toBe(100);
+  });
+
+  it("bán hết: vốn về 0, không còn lần mua", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 2, price_usd: 100 }),
+      tx({ quantity: -2, price_usd: 150, tx_date: "2026-11-11" }),
+    ]);
+    expect(btc?.quantity).toBe(0);
+    expect(btc?.investedUsd).toBe(0);
+    expect(btc?.avgCostUsd).toBe(0);
+    expect(btc?.purchases).toBe(1);
+  });
+
+  it("bán một phần sau nhiều lần mua giá khác nhau: avg cost không đổi", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 1, price_usd: 100 }),
+      tx({ quantity: 1, price_usd: 200, tx_date: "2026-11-11" }),
+      tx({ quantity: -1, price_usd: 300, tx_date: "2026-11-12" }),
+    ]);
+    expect(btc?.quantity).toBe(1);
+    expect(btc?.investedUsd).toBe(150);
+    expect(btc?.avgCostUsd).toBe(150);
+  });
+
+  it("phí bán không cộng vào vốn còn lại", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 10, price_usd: 100 }),
+      tx({ quantity: -5, price_usd: 120, fee_usd: 3, tx_date: "2026-11-11" }),
+    ]);
+    expect(btc?.investedUsd).toBe(500);
+    expect(btc?.avgCostUsd).toBe(100);
+  });
+
+  it("xử lý theo thứ tự ngày, không theo thứ tự mảng truyền vào", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: -1, price_usd: 300, tx_date: "2026-11-12" }),
+      tx({ quantity: 1, price_usd: 200, tx_date: "2026-11-11" }),
+      tx({ quantity: 1, price_usd: 100, tx_date: "2026-11-10" }),
+    ]);
+    expect(btc?.quantity).toBe(1);
+    expect(btc?.investedUsd).toBe(150);
+    expect(btc?.avgCostUsd).toBe(150);
+  });
+
+  it("bán vàng: vốn VND giảm theo avg cost VND", () => {
+    const [gold] = computeHoldings(
+      [
+        tx({
+          symbol: "PAXG",
+          coin_name: "Vàng",
+          quantity: 4,
+          price_usd: 3800,
+          price_vnd: 13_420_000,
+        }),
+        tx({
+          symbol: "PAXG",
+          coin_name: "Vàng",
+          quantity: -1,
+          price_usd: 3900,
+          price_vnd: 13_723_000,
+          tx_date: "2026-11-11",
+        }),
+      ],
+      {},
+    );
+    expect(gold?.quantity).toBe(3);
+    expect(gold?.investedVnd).toBe(3 * 13_420_000);
+    expect(gold?.avgCostVnd).toBe(13_420_000);
+  });
+});
+
 describe("accumulation streak", () => {
   const today = new Date(2026, 10, 16);
   it("counts consecutive days ending today", () => {

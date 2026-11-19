@@ -26,7 +26,9 @@ import { COINS, displaySymbol, getCoin } from "@/lib/coins";
 import { saveTransaction } from "@/lib/data";
 import { formatDateTime, formatMoney, todayKey, type Currency } from "@/lib/format";
 import { metalAskPerUnit, normalizeMetalPurchase } from "@/lib/metals";
-import type { Tx } from "@/lib/portfolio";
+import type { Holding, Tx } from "@/lib/portfolio";
+import { actionPercent, roundActionPercent } from "@/lib/swap";
+import { logActivity } from "@/lib/activity";
 import { usePrices } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { CoinLogo } from "./coin-logo";
@@ -41,11 +43,14 @@ export function TransactionDialog({
   onOpenChange,
   existing,
   defaultCurrency,
+  holdings,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   existing?: Tx | null;
   defaultCurrency: Currency;
+  /** Số lượng đang nắm (để tính % mua thêm so với trước giao dịch). */
+  holdings?: Holding[];
 }) {
   const user = useUser();
   const qc = useQueryClient();
@@ -63,8 +68,7 @@ export function TransactionDialog({
   const usdVnd = prices.data?.usdVnd ?? null;
   const usdKrw = prices.data?.usdKrw ?? null;
   /** Số đơn vị tiền tệ tương ứng 1 USDT (USDT = 1). */
-  const rateFor = (c: Currency): number | null =>
-    c === "VND" ? usdVnd : c === "KRW" ? usdKrw : 1;
+  const rateFor = (c: Currency): number | null => (c === "VND" ? usdVnd : c === "KRW" ? usdKrw : 1);
 
   useEffect(() => {
     if (!open) return;
@@ -212,6 +216,18 @@ export function TransactionDialog({
             ? "Đã cập nhật giao dịch."
             : "Đã ghi nhận lần tích sản!",
       );
+      // Ghi nhật ký hành động (chỉ lần mua MỚI, không ghi khi sửa): % mua thêm
+      // so với số lượng đang nắm trước giao dịch (mua lần đầu thì không có %).
+      if (!existing) {
+        const heldBefore = holdings?.find((h) => h.symbol === symbol)?.quantity ?? 0;
+        const pct = actionPercent(norm.quantity, heldBefore);
+        await logActivity({
+          userId: user.id,
+          type: "buy",
+          symbol,
+          pct: pct != null ? roundActionPercent(pct) : null,
+        });
+      }
       onOpenChange(false);
     } catch (err) {
       console.error(err);
@@ -297,22 +313,22 @@ export function TransactionDialog({
               {metal ? (
                 <span className="text-xs font-semibold text-muted-foreground">VND</span>
               ) : (
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={cur}
-                onValueChange={(v) => v && setCur(v as Currency)}
-              >
-                <ToggleGroupItem value="VND" className="h-7 px-2.5 text-xs">
-                  VND
-                </ToggleGroupItem>
-                <ToggleGroupItem value="USDT" className="h-7 px-2.5 text-xs">
-                  USDT
-                </ToggleGroupItem>
-                <ToggleGroupItem value="KRW" className="h-7 px-2.5 text-xs">
-                  KRW
-                </ToggleGroupItem>
-              </ToggleGroup>
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  value={cur}
+                  onValueChange={(v) => v && setCur(v as Currency)}
+                >
+                  <ToggleGroupItem value="VND" className="h-7 px-2.5 text-xs">
+                    VND
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="USDT" className="h-7 px-2.5 text-xs">
+                    USDT
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="KRW" className="h-7 px-2.5 text-xs">
+                    KRW
+                  </ToggleGroupItem>
+                </ToggleGroup>
               )}
             </div>
             <div className="flex gap-2">

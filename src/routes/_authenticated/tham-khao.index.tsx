@@ -2,7 +2,22 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BookMarked, Check, GitCompareArrows, Info, Lock, MessageSquareQuote, Pencil, Plus, Quote, Rocket, Send, UserCheck, UserX, X } from "lucide-react";
+import {
+  BookMarked,
+  Check,
+  GitCompareArrows,
+  Info,
+  Lock,
+  MessageSquareQuote,
+  Pencil,
+  Plus,
+  Quote,
+  Rocket,
+  Send,
+  UserCheck,
+  UserX,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,14 +33,22 @@ import { EmptyState, PageHeader } from "@/components/app/app-shell";
 import { CoinLogo } from "@/components/app/coin-logo";
 import { PushOptInCard, usePushSoftAsk } from "@/components/app/push-opt-in-card";
 import { DonutChart, CHART_COLORS } from "@/components/app/donut-chart";
+import { RecentActivities } from "@/components/app/recent-activities";
 import { PnlText } from "@/components/app/stat";
 import { usePortfolio, useReferences } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { displaySymbol } from "@/lib/coins";
 import { formatDateTime, formatNumber, formatPercent } from "@/lib/format";
+import { allocationSummary, logActivity } from "@/lib/activity";
 import { earliestTxDate, formatDurationSince } from "@/lib/accumulation";
 import { isAdminUser } from "@/lib/admin";
-import { fetchPublishedAllocations, needsPnlBackfill, publishedAllocationsKey, syncAdminAllocation, type AdminAllocation } from "@/lib/admin-allocation";
+import {
+  fetchPublishedAllocations,
+  needsPnlBackfill,
+  publishedAllocationsKey,
+  syncAdminAllocation,
+  type AdminAllocation,
+} from "@/lib/admin-allocation";
 import {
   cancelFollow,
   fetchMyFollowMap,
@@ -126,7 +149,10 @@ function InvestorPortfolioCard({
               <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Lãi / Lỗ theo vốn
               </div>
-              <PnlText value={pnl} className="num mt-1 block text-base font-bold leading-tight md:text-lg">
+              <PnlText
+                value={pnl}
+                className="num mt-1 block text-base font-bold leading-tight md:text-lg"
+              >
                 {pnl != null ? `${pnl >= 0 ? "+" : ""}${formatNumber(pnl, 1)}%` : "—"}
               </PnlText>
             </div>
@@ -194,6 +220,7 @@ function InvestorPortfolioCard({
               </button>
             )
           )}
+          <RecentActivities userId={allocation.user_id} />
           {followStatus === "approved" && onCancelFollow && (
             <button
               type="button"
@@ -306,8 +333,8 @@ function AdminMessageDialog({
         <DialogHeader>
           <DialogTitle>Lời nhắn của nhà đầu tư</DialogTitle>
           <DialogDescription>
-            Lời nhắn hiển thị cùng danh mục đã đăng trên tab Tham khảo cho mọi người dùng. Lưu
-            lời nhắn cũng đăng lại danh mục hiện tại của bạn.
+            Lời nhắn hiển thị cùng danh mục đã đăng trên tab Tham khảo cho mọi người dùng. Lưu lời
+            nhắn cũng đăng lại danh mục hiện tại của bạn.
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -319,7 +346,9 @@ function AdminMessageDialog({
         />
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            {value.trim() ? `${value.trim().length}/${MESSAGE_MAX} ký tự` : "Để trống để gỡ lời nhắn"}
+            {value.trim()
+              ? `${value.trim().length}/${MESSAGE_MAX} ký tự`
+              : "Để trống để gỡ lời nhắn"}
           </span>
           <span>Chỉ text — không hiển thị số tiền hay số lượng.</span>
         </div>
@@ -463,6 +492,7 @@ function ReferencesPage() {
         return;
       }
       await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
+      await logActivity({ userId: user.id, type: "message" });
       setMessageDialogOpen(false);
       toast.success(message.trim() ? "Đã lưu lời nhắn của nhà đầu tư." : "Đã gỡ lời nhắn.");
     } catch (e) {
@@ -487,6 +517,15 @@ function ReferencesPage() {
     try {
       const res = await syncAdminAllocation(user, allocation, adminStats);
       await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
+      // Chỉ ghi nhật ký khi thật sự có thay đổi được đăng (không ghi khi
+      // bấm mà portfolio không đổi).
+      if (res !== "unchanged") {
+        await logActivity({
+          userId: user.id,
+          type: "update",
+          meta: { allocation: allocationSummary(allocation.slices) },
+        });
+      }
       toast.success(
         res === "unchanged"
           ? "Portfolio của bạn đã đăng rồi, không có gì thay đổi."
@@ -610,9 +649,7 @@ function ReferencesPage() {
       <AdminMessageDialog
         open={messageDialogOpen}
         onOpenChange={setMessageDialogOpen}
-        initial={
-          (investors.find((a) => a.user_id === user.id) ?? previewCard)?.message ?? ""
-        }
+        initial={(investors.find((a) => a.user_id === user.id) ?? previewCard)?.message ?? ""}
         saving={savingMessage}
         onSave={(message) => void saveMessage(message)}
       />
@@ -647,50 +684,52 @@ function ReferencesPage() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {list.map((r, idx) => {
-            const sorted = [...r.holdings]
-              .filter((h) => h.percent != null)
-              .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0));
-            return (
-              <Link
-                key={r.id}
-                to="/tham-khao/$id"
-                params={{ id: r.id }}
-                className="panel group block p-5 transition-colors hover:border-primary/50"
-              >
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tham khảo {String(list.length - idx).padStart(2, "0")}
-                </div>
-                <h3 className="mt-1 truncate text-lg font-semibold group-hover:text-primary">
-                  {r.name}
-                </h3>
-                <div className="text-xs text-muted-foreground">
-                  {formatDateTime(r.created_at)} · {r.holdings.length} coin
-                </div>
-                <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-surface-raised">
-                  {sorted.map((h, i) => (
-                    <div
-                      key={h.symbol}
-                      style={{
-                        width: `${h.percent}%`,
-                        background: CHART_COLORS[i % CHART_COLORS.length],
-                      }}
-                    />
-                  ))}
-                </div>
-                <ul className="mt-3 space-y-1.5">
-                  {sorted.slice(0, 4).map((h) => (
-                    <li key={h.symbol} className="flex items-center gap-2 text-sm">
-                      <CoinLogo symbol={h.symbol} size={18} />
-                      <span className="flex-1">{displaySymbol(h.symbol)}</span>
-                      <span className="num text-muted-foreground">{formatPercent(h.percent)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+                const sorted = [...r.holdings]
+                  .filter((h) => h.percent != null)
+                  .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0));
+                return (
+                  <Link
+                    key={r.id}
+                    to="/tham-khao/$id"
+                    params={{ id: r.id }}
+                    className="panel group block p-5 transition-colors hover:border-primary/50"
+                  >
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Tham khảo {String(list.length - idx).padStart(2, "0")}
+                    </div>
+                    <h3 className="mt-1 truncate text-lg font-semibold group-hover:text-primary">
+                      {r.name}
+                    </h3>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDateTime(r.created_at)} · {r.holdings.length} coin
+                    </div>
+                    <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-surface-raised">
+                      {sorted.map((h, i) => (
+                        <div
+                          key={h.symbol}
+                          style={{
+                            width: `${h.percent}%`,
+                            background: CHART_COLORS[i % CHART_COLORS.length],
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <ul className="mt-3 space-y-1.5">
+                      {sorted.slice(0, 4).map((h) => (
+                        <li key={h.symbol} className="flex items-center gap-2 text-sm">
+                          <CoinLogo symbol={h.symbol} size={18} />
+                          <span className="flex-1">{displaySymbol(h.symbol)}</span>
+                          <span className="num text-muted-foreground">
+                            {formatPercent(h.percent)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </section>
       )}
 

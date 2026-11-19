@@ -35,6 +35,17 @@ describe("groupByMonth", () => {
     expect(groups[1]?.investedUsd).toBe(105);
   });
 
+  it("bán/đổi (số lượng âm) không tính vào 'lần mua', vốn tháng tính ròng", () => {
+    const groups = groupByMonth([
+      tx("2026-11-05", 1, 100),
+      tx("2026-11-10", -0.5, 120),
+      tx("2026-11-15", 1, 200),
+    ]);
+    expect(groups[0]?.buys).toBe(2);
+    // Vốn ròng tháng: 100 − 0,5×120 + 200 = 240.
+    expect(groups[0]?.investedUsd).toBe(240);
+  });
+
   it("nhãn tháng tiếng Việt", () => {
     expect(monthLabel("2026-11")).toBe("Tháng 11 2026");
     expect(monthLabel("2025-01")).toBe("Tháng 1 2025");

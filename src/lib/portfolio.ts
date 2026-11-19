@@ -53,13 +53,28 @@ export interface Holding {
   pnlVnd: number | null;
 }
 
-/** Aggregates DCA purchases into holdings; values use live prices when available. */
+/** Aggregates DCA purchases into holdings; values use live prices when available.
+ * Giao dịch bán (quantity âm) giảm vốn theo GIÁ MUA TRUNG BÌNH tại thời
+ * điểm bán — không theo giá bán — nên giá mua trung bình của phần còn lại
+ * không bị lệch. Phí bán là chi phí đã thực hiện, không cộng vào vốn còn
+ * lại. Giao dịch được xử lý theo thứ tự thời gian (tx_date, rồi id) vì
+ * giá mua trung bình phụ thuộc vào thứ tự mua/bán. */
 export function computeHoldings(txs: Tx[], prices: PriceMap = {}): Holding[] {
   const map = new Map<string, Holding>();
-  for (const t of txs) {
+  const ordered = [...txs].sort((a, b) =>
+    a.tx_date === b.tx_date
+      ? a.id < b.id
+        ? -1
+        : a.id > b.id
+          ? 1
+          : 0
+      : a.tx_date < b.tx_date
+        ? -1
+        : 1,
+  );
+  for (const t of ordered) {
     const symbol = normalizeSymbol(t.symbol);
     const qty = Number(t.quantity);
-    const cost = qty * Number(t.price_usd) + Number(t.fee_usd || 0);
     const h = map.get(symbol) ?? {
       symbol,
       name: coinName(symbol, t.coin_name),
@@ -77,21 +92,33 @@ export function computeHoldings(txs: Tx[], prices: PriceMap = {}): Holding[] {
       valueVnd: null,
       pnlVnd: null,
     };
-    h.quantity += qty;
-    h.investedUsd += cost;
     const pv = t.price_vnd == null ? NaN : Number(t.price_vnd);
-    h.investedVnd =
-      h.investedVnd != null && Number.isFinite(pv)
-        ? h.investedVnd + qty * pv + Number(t.fee_vnd || 0)
-        : null;
-    h.purchases += 1;
+    if (qty < 0) {
+      // Bán: vốn giảm theo giá mua trung bình của phần đang nắm.
+      const sellQty = -qty;
+      const avgUsd = h.quantity > 0 ? h.investedUsd / h.quantity : 0;
+      h.investedUsd -= sellQty * avgUsd;
+      if (h.investedVnd != null) {
+        const avgVnd = h.quantity > 0 ? h.investedVnd / h.quantity : 0;
+        h.investedVnd -= sellQty * avgVnd;
+      }
+      h.quantity += qty;
+    } else {
+      const cost = qty * Number(t.price_usd) + Number(t.fee_usd || 0);
+      h.quantity += qty;
+      h.investedUsd += cost;
+      h.investedVnd =
+        h.investedVnd != null && Number.isFinite(pv)
+          ? h.investedVnd + qty * pv + Number(t.fee_vnd || 0)
+          : null;
+      h.purchases += 1;
+    }
     map.set(symbol, h);
   }
   const out = [...map.values()].map((h) => {
     const q = prices[h.symbol];
     const avgCostUsd = h.quantity > 0 ? h.investedUsd / h.quantity : 0;
-    const avgCostVnd =
-      h.investedVnd != null && h.quantity > 0 ? h.investedVnd / h.quantity : null;
+    const avgCostVnd = h.investedVnd != null && h.quantity > 0 ? h.investedVnd / h.quantity : null;
     const valueVnd = q && q.vnd > 0 ? h.quantity * q.vnd : null;
     const pnlVnd = valueVnd != null && h.investedVnd != null ? valueVnd - h.investedVnd : null;
     const base = { ...h, avgCostUsd, avgCostVnd, valueVnd, pnlVnd };

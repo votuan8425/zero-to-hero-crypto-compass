@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  ArrowRightLeft,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +32,7 @@ import { CoinLogo } from "@/components/app/coin-logo";
 import { DonutChart } from "@/components/app/donut-chart";
 import { Stat } from "@/components/app/stat";
 import { TransactionDialog } from "@/components/app/transaction-dialog";
+import { SwapDialog } from "@/components/app/swap-dialog";
 import { useSync } from "@/components/app/sync-provider";
 import { convertUsd, useCurrency, usePortfolio } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
@@ -85,6 +87,7 @@ function AccumulatePage() {
   const { txs, totals, allocation, holdings, usdVnd, usdKrw } = usePortfolio();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tx | null>(null);
+  const [swapOpen, setSwapOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Tx | null>(null);
 
   useEffect(() => {
@@ -104,7 +107,7 @@ function AccumulatePage() {
   );
 
   const thisYear = new Date().getFullYear();
-  const firstYear = groups.length > 0 ? groups[groups.length - 1]?.year ?? thisYear : thisYear;
+  const firstYear = groups.length > 0 ? (groups[groups.length - 1]?.year ?? thisYear) : thisYear;
   const [year, setYear] = useState(thisYear);
   const yearGroups = useMemo(() => groups.filter((g) => g.year === year), [groups, year]);
   const yearTotal = useMemo(() => yearTotals(groups, year), [groups, year]);
@@ -113,7 +116,9 @@ function AccumulatePage() {
   const [clickedKey, setClickedKey] = useState<string | null>(null);
   const selected: MonthGroup | null =
     yearGroups.find((g) => g.key === selectedKey) ??
-    yearGroups.find((g) => g.key === `${thisYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`) ??
+    yearGroups.find(
+      (g) => g.key === `${thisYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+    ) ??
     yearGroups[0] ??
     null;
   const maxMonth = Math.max(0, ...yearGroups.map((g) => g.investedUsd));
@@ -142,15 +147,24 @@ function AccumulatePage() {
         title="Tích sản"
         subtitle="Mua đều đặn, kiên nhẫn nắm giữ."
         action={
-          <Button
-            variant="hero"
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            <Plus /> Tích sản
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="surface"
+              onClick={() => setSwapOpen(true)}
+              disabled={holdings.length === 0}
+            >
+              <ArrowRightLeft /> Chuyển đổi
+            </Button>
+            <Button
+              variant="hero"
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <Plus /> Tích sản
+            </Button>
+          </div>
         }
       />
 
@@ -229,11 +243,7 @@ function AccumulatePage() {
                         <span
                           className={cn(
                             "absolute top-0 z-20 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-3 py-2 text-left shadow-lg",
-                            i <= 1
-                              ? "left-0"
-                              : i >= 10
-                                ? "right-0"
-                                : "left-1/2 -translate-x-1/2",
+                            i <= 1 ? "left-0" : i >= 10 ? "right-0" : "left-1/2 -translate-x-1/2",
                           )}
                         >
                           <span className="block text-xs font-bold">{monthLabel(key)}</span>
@@ -276,9 +286,7 @@ function AccumulatePage() {
               {selected && (
                 <div className="mt-4 rounded-lg bg-surface-raised px-4 py-3">
                   <div className="text-xs text-muted-foreground">{monthLabel(selected.key)}</div>
-                  <div className="num mt-0.5 text-lg font-bold">
-                    {money(selected.investedUsd)}
-                  </div>
+                  <div className="num mt-0.5 text-lg font-bold">{money(selected.investedUsd)}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {selected.buys} lần mua · Avg{" "}
                     {money(selected.buys ? selected.investedUsd / selected.buys : null)}
@@ -310,9 +318,7 @@ function AccumulatePage() {
               label="Số tháng đã tích"
               value={`${monthly.months} tháng`}
               hint={
-                monthly.firstMonth
-                  ? `Từ ${monthLabel(monthly.firstMonth)}`
-                  : "Chưa có tháng nào"
+                monthly.firstMonth ? `Từ ${monthLabel(monthly.firstMonth)}` : "Chưa có tháng nào"
               }
             />
             <Stat
@@ -385,7 +391,8 @@ function AccumulatePage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="num font-semibold">
-                                +{formatNumber(t.quantity)} {quantityUnit(t.symbol)}
+                                {t.quantity > 0 ? "+" : ""}
+                                {formatNumber(t.quantity)} {quantityUnit(t.symbol)}
                               </span>
                               {pendingIds.has(t.id) && (
                                 <Badge
@@ -400,7 +407,11 @@ function AccumulatePage() {
                               {getCoin(t.symbol)?.unit ? (
                                 // Vàng/bạc luôn hiển thị bằng VND (giá VND chính xác nếu có).
                                 <>
-                                  Giá {formatMoney(t.price_vnd ?? (usdVnd ? t.price_usd * usdVnd : null), "VND")}{" "}
+                                  Giá{" "}
+                                  {formatMoney(
+                                    t.price_vnd ?? (usdVnd ? t.price_usd * usdVnd : null),
+                                    "VND",
+                                  )}{" "}
                                   · Tổng{" "}
                                   {formatMoney(
                                     t.price_vnd != null
@@ -457,7 +468,10 @@ function AccumulatePage() {
         onOpenChange={setOpen}
         existing={editing}
         defaultCurrency={currency}
+        holdings={holdings}
       />
+
+      <SwapDialog open={swapOpen} onOpenChange={setSwapOpen} holdings={holdings} />
 
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
         <AlertDialogContent>
