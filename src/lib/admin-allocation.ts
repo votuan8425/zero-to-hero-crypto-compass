@@ -152,6 +152,23 @@ export function messageChanged(
   return (prev ?? "").trim() !== (next ?? "").trim();
 }
 
+/**
+ * True khi hàng đã đăng là hàng CŨ (đăng trước khi có lãi/lỗ từng token):
+ * có slices nhưng TẤT CẢ đều chưa có pnlPct, trong khi danh mục hiện tại
+ * của admin ĐÃ có lãi/lỗ từng token để ghi. Dùng để backfill 1 lần cho
+ * hàng cũ — KHÁC với auto-sync đã gỡ (nó chạy mỗi lần vào trang và báo
+ * follower dù không có gì mới). Sau khi backfill ghi xong, hàng đã có
+ * pnlPct nên hàm này trả false và không bao giờ chạy lại.
+ */
+export function needsPnlBackfill(
+  published: AdminAllocation | null | undefined,
+  current: readonly AllocationSlice[],
+): boolean {
+  if (!published || published.slices.length === 0) return false;
+  if (!published.slices.every((s) => s.pnlPct == null)) return false;
+  return current.some((s) => s.pnlPct != null && Number.isFinite(s.pnlPct));
+}
+
 type AdminAllocationRow = {
   user_id: string;
   slices: unknown;

@@ -17,13 +17,17 @@ export interface DonutItem {
 
 const RADIAN = Math.PI / 180;
 /** Lát nhỏ hơn 8% thì chữ % không đủ chỗ trên vành — để trống, xem % ở bảng dưới. */
-const MIN_LABELED_PERCENT = 0.08;
+const MIN_LABELED_PERCENT = 8;
 
 /**
- * Ghi % lên giữa vành của từng lát cắt (Recharts truyền cho label các
- * props của sector: cx, cy, midAngle, innerRadius, outerRadius, percent
- * là phần trăm theo phân số 0–1). Chữ đậm màu tối + viền trắng mờ để đọc
- * được trên mọi màu lát, cả theme sáng lẫn tối (các màu --chart đều sáng).
+ * Ghi % lên giữa vành của từng lát cắt.
+ *
+ * BẪY: Recharts truyền cho label prop `percent` là PHÂN SỐ (0–1) theo
+ * tài liệu, NHƯNG khi dataKey="percent" thì lúc dựng sector nó spread
+ * data item gốc SAU phân số đã tính, nên `percent` bị ghi đè thành giá
+ * trị thô 0–100 (80,93). Dùng `percent * 100` sẽ ra 8093 → hiện "8.093%"
+ * (dấu chấm là phân cách hàng nghìn của vi-VN). Vì vậy dùng `value` —
+ * giá trị thô của dataKey (0–100) — và KHÔNG nhân 100 nữa.
  */
 function renderSlicePercent(props: {
   cx?: number;
@@ -31,6 +35,7 @@ function renderSlicePercent(props: {
   midAngle?: number;
   innerRadius?: number;
   outerRadius?: number;
+  value?: number;
   percent?: number;
 }) {
   const {
@@ -39,9 +44,20 @@ function renderSlicePercent(props: {
     midAngle = 0,
     innerRadius = 0,
     outerRadius = 0,
-    percent = 0,
+    value,
+    percent,
   } = props;
-  if (percent < MIN_LABELED_PERCENT) return null;
+  // value là % vị thế 0–100. Dự phòng khi value thiếu: percent có thể là
+  // phân số (≤ 1) hoặc giá trị thô (> 1).
+  const pct =
+    value != null && Number.isFinite(value)
+      ? value
+      : percent != null && Number.isFinite(percent)
+        ? percent <= 1
+          ? percent * 100
+          : percent
+        : NaN;
+  if (!Number.isFinite(pct) || pct < MIN_LABELED_PERCENT) return null;
   const radius = innerRadius + (outerRadius - innerRadius) / 2;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -58,7 +74,7 @@ function renderSlicePercent(props: {
       strokeWidth={3}
       paintOrder="stroke"
     >
-      {formatPercent(percent * 100)}
+      {formatPercent(pct)}
     </text>
   );
 }

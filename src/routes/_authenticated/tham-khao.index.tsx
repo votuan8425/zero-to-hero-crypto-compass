@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BookMarked, Check, GitCompareArrows, Info, Lock, MessageSquareQuote, Pencil, Plus, Quote, Rocket, Send, UserCheck, UserX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,7 @@ import { displaySymbol } from "@/lib/coins";
 import { formatDateTime, formatNumber, formatPercent } from "@/lib/format";
 import { earliestTxDate, formatDurationSince } from "@/lib/accumulation";
 import { isAdminUser } from "@/lib/admin";
-import {
-  fetchPublishedAllocations,
-  publishedAllocationsKey,
-  syncAdminAllocation,
-  type AdminAllocation,
-} from "@/lib/admin-allocation";
+import { fetchPublishedAllocations, needsPnlBackfill, publishedAllocationsKey, syncAdminAllocation, type AdminAllocation } from "@/lib/admin-allocation";
 import {
   cancelFollow,
   fetchMyFollowMap,
@@ -508,6 +503,28 @@ function ReferencesPage() {
   const previewCard = !investors.some((a) => a.user_id === user.id) ? preview : null;
   // Danh mục đã đăng của chính admin (để hiện "đã đăng lúc ..." trong banner).
   const ownPublished = admin ? (investors.find((a) => a.user_id === user.id) ?? null) : null;
+
+  // Backfill 1 LẦN cho hàng đã đăng từ trước khi có lãi/lỗ từng token:
+  // hàng cũ có slices nhưng chưa có pnlPct nào, trong khi danh mục hiện
+  // tại của admin đã có. Ghi 1 lần rồi thôi (sau đó hàng đã có pnlPct
+  // nên không chạy lại). KHÁC với auto-sync đã gỡ: chỉ chạy khi hàng còn
+  // thiếu pnlPct, không chạy mỗi lần vào trang. Lỗi thì bỏ qua — admin
+  // vẫn bấm "Cập nhật portfolio" để ghi tay được.
+  const backfilledRef = useRef(false);
+  useEffect(() => {
+    if (!admin || backfilledRef.current) return;
+    if (!needsPnlBackfill(ownPublished, allocation.slices)) return;
+    backfilledRef.current = true;
+    void (async () => {
+      try {
+        await syncAdminAllocation(user, allocation, adminStats);
+        await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
+      } catch {
+        // Bỏ qua — lần mở trang sau sẽ thử lại (ref chỉ chặn trong 1 lần mở).
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin, ownPublished, allocation]);
 
   return (
     <div>

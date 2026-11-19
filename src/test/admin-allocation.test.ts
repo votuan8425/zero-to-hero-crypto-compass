@@ -3,6 +3,7 @@ import {
   allocationChanged,
   buildAdminAllocationSlices,
   messageChanged,
+  needsPnlBackfill,
   readFollowedInvestorId,
   saveFollowedInvestorId,
   selectPublishedAllocation,
@@ -71,6 +72,47 @@ describe("allocationChanged", () => {
     expect(
       allocationChanged(prev, [{ symbol: "BTC", name: "Bitcoin", percent: 45, pnlPct: null }]),
     ).toBe(true);
+  });
+});
+
+describe("needsPnlBackfill (backfill 1 lần cho hàng cũ thiếu lãi/lỗ từng token)", () => {
+  const legacy: AdminAllocation = {
+    user_id: "u1",
+    slices: [
+      { symbol: "ETH", name: "Ethereum", percent: 80.93, pnlPct: null },
+      { symbol: "BTC", name: "Bitcoin", percent: 19.07 },
+    ],
+    updated_at: "2026-11-19T18:10:00Z",
+    startedAt: "2026-11-17",
+    pnlPct: -11.5,
+    message: null,
+    messageUpdatedAt: null,
+  };
+  const current = [
+    { symbol: "ETH", name: "Ethereum", percent: 80.93, pnlPct: 3.45 },
+    { symbol: "BTC", name: "Bitcoin", percent: 19.07, pnlPct: -12.64 },
+  ];
+  it("true khi hàng cũ chưa có pnlPct nào mà danh mục hiện tại đã có", () => {
+    expect(needsPnlBackfill(legacy, current)).toBe(true);
+  });
+  it("false khi hàng đã có pnlPct (đã backfill rồi thì không chạy lại)", () => {
+    const filled: AdminAllocation = {
+      ...legacy,
+      slices: [
+        { symbol: "ETH", name: "Ethereum", percent: 80.93, pnlPct: 3.45 },
+        { symbol: "BTC", name: "Bitcoin", percent: 19.07, pnlPct: -12.64 },
+      ],
+    };
+    expect(needsPnlBackfill(filled, current)).toBe(false);
+  });
+  it("false khi chưa có hàng đăng, hoặc danh mục hiện tại cũng chưa có pnlPct", () => {
+    expect(needsPnlBackfill(null, current)).toBe(false);
+    expect(
+      needsPnlBackfill(legacy, [
+        { symbol: "ETH", name: "Ethereum", percent: 80.93, pnlPct: null },
+      ]),
+    ).toBe(false);
+    expect(needsPnlBackfill({ ...legacy, slices: [] }, current)).toBe(false);
   });
 });
 
