@@ -92,7 +92,7 @@ function HomePage() {
   const [period, setPeriod] = useState<HistoryPeriod>("1M");
   const [hovered, setHovered] = useState<HistoryPoint | null>(null);
   const heldSymbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
-  const historyQuery = usePortfolioHistory(heldSymbols, prices.data?.prices);
+  const historyQuery = usePortfolioHistory(heldSymbols, prices.data?.prices, period);
   const history = useMemo(() => {
     if (!historyQuery.data) return null;
     const toMs = Date.now();

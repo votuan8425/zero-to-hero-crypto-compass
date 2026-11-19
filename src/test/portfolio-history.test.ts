@@ -174,6 +174,22 @@ describe("lịch sử giá trị danh mục", () => {
     ).toEqual([]);
   });
 
+  it("một đồng đang nắm mà không có nến thì rỗng (không vẽ chart thiếu đồng đó)", () => {
+    const h = computePortfolioHistory(
+      [
+        tx({ symbol: "BTC", quantity: 1, tx_date: "2026-11-01" }),
+        tx({ symbol: "ETH", quantity: 10, tx_date: "2026-11-01" }),
+      ],
+      {
+        BTC: daily([100, 110]),
+        ETH: [],
+      },
+      t0,
+      t0 + DAY,
+    );
+    expect(h.points).toEqual([]);
+  });
+
   it("kỳ xem: 1D=1, 1W=7, 1M=30, 3M=90, 1Y=365 ngày", () => {
     expect(historyPeriodDays("1D")).toBe(1);
     expect(historyPeriodDays("1W")).toBe(7);

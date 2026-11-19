@@ -130,6 +130,15 @@ export function computePortfolioHistory(
     .filter((b) => Number.isFinite(b.qty) && b.qty > 0)
     .sort((a, b) => a.at - b.at);
   if (buys.length === 0) return EMPTY;
+  // Một đồng đang nắm mà không có nến nào (tải nến lỗi VÀ không có giá live
+  // để lấp) thì đừng vẽ chart thiếu đồng đó — trả rỗng để UI hiện "chưa có
+  // dữ liệu" thay vì đường tổng thấp hẳn rồi điểm cuối live kéo lên, gây
+  // PNL ảo (từng thấy PNL 1D nhảy +500 trong khi biến động thật chỉ vài USDT).
+  const heldInPeriod = new Set(buys.filter((b) => b.at <= toMs).map((b) => b.symbol));
+  for (const symbol of heldInPeriod) {
+    const series = closesBySymbol[symbol];
+    if (!series || series.length === 0) return EMPTY;
+  }
   // Giá trị tại đầu kỳ: số lượng đã mua tới đầu kỳ × giá đóng cửa gần nhất
   // tại hoặc trước đầu kỳ (0 nếu lúc đó chưa mua gì).
   let startValue = 0;

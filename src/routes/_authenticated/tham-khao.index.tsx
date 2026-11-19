@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { BookMarked, Check, GitCompareArrows, Info, Lock, MessageSquareQuote, Pencil, Plus, Quote, Rocket, Send, UserCheck, UserX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -424,7 +424,6 @@ function ReferencesPage() {
     }
   }
 
-  const syncedRef = useRef(false);
   const [deploying, setDeploying] = useState(false);
 
   // Số liệu công khai khi đăng: ngày mua đầu tiên + lãi/lỗ % theo vốn.
@@ -474,23 +473,11 @@ function ReferencesPage() {
     }
   }
 
-  // Admin: đồng bộ tỷ lệ % danh mục của mình lên tab Tham khảo mỗi lần vào.
-  useEffect(() => {
-    if (!admin || syncedRef.current) return;
-    if (txs.isLoading || prices.isLoading) return;
-    if (allocation.slices.length === 0) return;
-    syncedRef.current = true;
-    void syncAdminAllocation(user, allocation, adminStats)
-      .then(() => {
-        void qc.invalidateQueries({ queryKey: publishedAllocationsKey });
-      })
-      .catch((e) => {
-        console.error("Không đồng bộ được danh mục admin", e);
-        syncedRef.current = false;
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admin, allocation, txs.isLoading, prices.isLoading, user]);
-
+  // Admin CHỈ cập nhật portfolio khi bấm nút "Cập nhật portfolio" (updatePortfolio
+  // bên dưới). Trước đây có một useEffect tự đồng bộ mỗi lần admin vào tab
+  // Tham khảo — đã gỡ vì nó tự ghi đè hàng đã đăng (giá live làm tỷ lệ %
+  // và lãi/lỗ trôi qua ngưỡng 0,01) rồi trigger báo cho mọi follower, dù
+  // admin chỉ mở app xem chứ không đăng gì.
   async function deployPortfolio() {
     if (deploying) return;
     if (allocation.slices.length === 0) {
@@ -504,10 +491,10 @@ function ReferencesPage() {
       toast.success(
         res === "unchanged"
           ? "Portfolio của bạn đã đăng rồi, không có gì thay đổi."
-          : "Đã đăng portfolio — người dùng khác sẽ thấy tỷ lệ % và hiệu suất của bạn.",
+          : "Đã cập nhật portfolio — người dùng khác sẽ thấy tỷ lệ % và hiệu suất mới của bạn.",
       );
     } catch {
-      toast.error("Không đăng được portfolio. Vui lòng thử lại.");
+      toast.error("Không cập nhật được portfolio. Vui lòng thử lại.");
     } finally {
       setDeploying(false);
     }
@@ -524,7 +511,7 @@ function ReferencesPage() {
         title="Tham khảo"
         subtitle={
           admin
-            ? "Chỉ bạn (admin) mới thêm/sửa được. Bấm “Đăng portfolio” để công bố danh mục của bạn; người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
+            ? "Chỉ bạn (admin) mới thêm/sửa được. Bấm “Cập nhật portfolio” để công bố hoặc cập nhật danh mục của bạn; người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
             : "Danh mục tham khảo của Admin — gửi yêu cầu theo dõi, admin duyệt thì mới xem được biểu đồ tỷ lệ %."
         }
         action={
@@ -543,7 +530,7 @@ function ReferencesPage() {
                 </Link>
               </Button>
               <Button variant="hero" onClick={() => void deployPortfolio()} disabled={deploying}>
-                <Rocket /> {deploying ? "Đang đăng…" : "Đăng portfolio"}
+                <Rocket /> {deploying ? "Đang cập nhật…" : "Cập nhật portfolio"}
               </Button>
             </div>
           ) : undefined
@@ -553,8 +540,8 @@ function ReferencesPage() {
         <Info className="h-4 w-4 shrink-0" />
         {admin
           ? ownPublished
-            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(ownPublished.updated_at)} — chỉ người được bạn duyệt theo dõi mới xem được biểu đồ tỷ lệ %; người khác chỉ thấy tên và phải gửi yêu cầu. Bấm “Đăng portfolio” để cập nhật lại bất cứ lúc nào.`
-            : "Bạn chưa đăng portfolio. Bấm “Đăng portfolio” để công bố danh mục — người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
+            ? `Portfolio của bạn đã đăng lúc ${formatDateTime(ownPublished.updated_at)} — chỉ người được bạn duyệt theo dõi mới xem được biểu đồ tỷ lệ %; người khác chỉ thấy tên và phải gửi yêu cầu. Bấm “Cập nhật portfolio” để cập nhật lại bất cứ lúc nào.`
+            : "Bạn chưa đăng portfolio. Bấm “Cập nhật portfolio” để công bố danh mục — người khác phải gửi yêu cầu theo dõi và được bạn duyệt mới xem được biểu đồ."
           : "Biểu đồ danh mục chỉ hiện sau khi admin duyệt yêu cầu theo dõi của bạn. Gửi yêu cầu trên thẻ nhà đầu tư rồi chờ duyệt."}
       </div>
 

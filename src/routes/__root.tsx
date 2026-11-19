@@ -298,6 +298,7 @@ function RootComponent() {
               const options = portfolioHistoryQuery(
                 holdings.map((h) => h.symbol),
                 pricesData?.prices,
+                "1M",
               );
               await queryClient.prefetchQuery(options).catch(() => undefined);
               const data = queryClient.getQueryData<HistorySeries>(options.queryKey);
