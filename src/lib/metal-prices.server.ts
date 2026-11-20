@@ -110,6 +110,36 @@ export async function recordMetalPrices(slot: Date): Promise<{ saved: string[] }
   return { saved: rows.map((r) => r.symbol) };
 }
 
+/**
+ * Lịch sử giá mua vào / bán ra trong nước theo từng mốc (06:00 / 22:00),
+ * để vẽ biểu đồ theo đúng giá SJC / Ancarat thay vì giá thế giới.
+ * Trả về theo thứ tự thời gian tăng dần.
+ */
+export interface MetalHistoryRow {
+  slotAt: string;
+  bidVnd: number;
+  askVnd: number;
+}
+
+export async function getMetalHistoryRows(
+  symbol: string,
+  sinceIso: string,
+): Promise<MetalHistoryRow[]> {
+  const db = publicClient();
+  const { data, error } = await db
+    .from("metal_prices")
+    .select("slot_at, bid_vnd, ask_vnd")
+    .eq("symbol", symbol)
+    .gte("slot_at", sinceIso)
+    .order("slot_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    slotAt: r.slot_at,
+    bidVnd: Number(r.bid_vnd),
+    askVnd: Number(r.ask_vnd),
+  }));
+}
+
 export interface MetalSnapshot {
   bidVnd: number;
   askVnd: number;

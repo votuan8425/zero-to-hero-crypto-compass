@@ -18,6 +18,7 @@ import { metalChartFactor } from "@/lib/metals";
 import {
   CHART_VISIBLE_COUNT,
   getCandles,
+  getMetalHistory,
   type CandlePoint,
   type ChartRange,
 } from "@/lib/prices.functions";
@@ -71,11 +72,7 @@ export function formatSelectedTime(t: number, range: ChartRange): string {
 
 /** Bước zoom (đổi số nến hiển thị): phóng to = ít nến hơn (mỗi nến to ra),
  *  thu nhỏ = nhiều nến hơn; kẹp trong [8, tổng số nến đã nạp]. */
-export function zoomVisibleCount(
-  current: number,
-  total: number,
-  dir: "in" | "out",
-): number {
+export function zoomVisibleCount(current: number, total: number, dir: "in" | "out"): number {
   const next = dir === "in" ? Math.round(current * 0.7) : Math.round(current * 1.4);
   return Math.min(Math.max(next, 8), Math.max(total, 8));
 }
@@ -149,24 +146,39 @@ export function PriceChartDialog({
   const clipPlotId = useId();
   const clipTimeId = useId();
   const coin = symbol ? getCoin(symbol) : undefined;
+  // Vàng/bạc: biểu đồ theo đúng giá trong nước (SJC / Ancarat) từ bảng
+  // metal_prices, KHÔNG dùng nến thế giới nữa (lệch xa giá SJC ở khung trên).
+  const isMetal = !!coin?.unit;
   const candles = useQuery({
     queryKey: ["candles", symbol, range],
-    // Server Lovable là nguồn chính (OKX); khi server không lấy được dữ
-    // liệu (bị chặn/rate-limit) thì lấy trực tiếp từ trình duyệt (CoinGecko)
-    // thay vì báo lỗi — chart vẫn vẽ được.
     queryFn: async () => {
-      const server = await getCandles({ data: { symbol: symbol ?? "", range } }).catch(
-        () => null,
-      );
+      if (isMetal) {
+        const res = await getMetalHistory({ data: { symbol: symbol ?? "", range } }).catch(
+          () => null,
+        );
+        if (res && !res.error && res.points.length >= 2) return res;
+        return {
+          symbol: symbol ?? "",
+          range,
+          points: [],
+          changePct: null,
+          error: "Chưa có đủ lịch sử giá trong nước để vẽ biểu đồ.",
+        };
+      }
+      // Server Lovable là nguồn chính (OKX); khi server không lấy được dữ
+      // liệu (bị chặn/rate-limit) thì lấy trực tiếp từ trình duyệt (CoinGecko)
+      // thay vì báo lỗi — chart vẫn vẽ được.
+      const server = await getCandles({ data: { symbol: symbol ?? "", range } }).catch(() => null);
       if (server && !server.error && server.points.length >= 2) return server;
       return fetchCandlesFromBrowser(symbol ?? "", range);
     },
     enabled: open && !!symbol,
     staleTime: 60_000,
   });
-  // Vàng/bạc: nến CoinGecko là giá thế giới USD/ounce — quy đổi sang VND
-  // theo đơn vị trong nước (chỉ/lượng) để khớp với bảng giá và khung mua/bán.
-  const chartFactor = metalChartFactor(symbol ?? "", usdVnd);
+  // Vàng/bạc: điểm nến đã là VND theo chỉ/lượng nên KHÔNG quy đổi nữa.
+  // Coin thường: nến là USD, vẫn cần metalChartFactor cho vàng/bạc cũ —
+  // nhưng nhánh kim loại giờ đi getMetalHistory nên hệ số này luôn null ở đây.
+  const chartFactor = isMetal ? null : metalChartFactor(symbol ?? "", usdVnd);
   const points = useMemo(() => {
     const raw = candles.data?.points ?? [];
     if (!chartFactor) return raw;
@@ -240,9 +252,7 @@ export function PriceChartDialog({
       };
     });
     // Nhãn thời gian dưới trục: 5 mốc cách đều trong cửa sổ, kẹp cho khỏi tràn.
-    const labelIdx = [0, 1, 2, 3, 4].map((k) =>
-      Math.round((k * (visiblePoints.length - 1)) / 4),
-    );
+    const labelIdx = [0, 1, 2, 3, 4].map((k) => Math.round((k * (visiblePoints.length - 1)) / 4));
     const timeLabels = [...new Set(labelIdx)]
       .map((i) => {
         const p = visiblePoints[i];
@@ -314,8 +324,8 @@ export function PriceChartDialog({
       ? ((lastVisible.c - firstVisible.c) / firstVisible.c) * 100
       : null;
   const up = (change ?? 0) >= 0;
-  // Vàng/bạc: biểu đồ là giá thế giới đã quy đổi theo chỉ/lượng (chỉ để xem xu hướng);
-  // giá trong nước SJC / Ancarat hiện ở khung riêng phía trên.
+  // Vàng/bạc: biểu đồ là giá trong nước (SJC / Ancarat) theo từng mốc
+  // 06:00 / 22:00, khớp với khung Mua vào / Bán ra phía trên.
   const metalUnit = coin?.unit;
   // Điểm nến vàng/bạc đã quy đổi sang VND theo chỉ/lượng ở trên nên hiện thẳng số VND.
   const show = (usd: number | null, compact = false) =>
@@ -395,7 +405,7 @@ export function PriceChartDialog({
           </DialogTitle>
           <DialogDescription>
             {metalUnit
-              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}, cập nhật lúc 6:00 và 22:00 mỗi ngày${quote?.updatedAt ? ` (lần gần nhất ${formatDateTime(quote.updatedAt)})` : ""}. Biểu đồ bên dưới là giá thế giới quy đổi theo ${metalUnit}, chỉ để xem xu hướng.`
+              ? `Giá ${coin?.priceSource} mỗi ${metalUnit}, cập nhật lúc 6:00 và 22:00 mỗi ngày${quote?.updatedAt ? ` (lần gần nhất ${formatDateTime(quote.updatedAt)})` : ""}. Biểu đồ bên dưới là giá ${coin?.priceSource} trong nước theo từng mốc cập nhật.`
               : "Biểu đồ giá từ OKX."}
           </DialogDescription>
         </DialogHeader>
@@ -421,7 +431,9 @@ export function PriceChartDialog({
           <div>
             <div className="num text-2xl font-bold tracking-tight">
               {lastPrice != null ? show(lastPrice) : "—"}
-              {unit && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{unit}</span>}
+              {unit && (
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">{unit}</span>
+              )}
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
               {range === "1D" ? "24 giờ qua" : range === "1M" ? "30 ngày qua" : "52 tuần qua"}
@@ -479,9 +491,7 @@ export function PriceChartDialog({
               aria-label="Thu nhỏ: xem nhiều nến hơn"
               title="Thu nhỏ: xem nhiều nến hơn"
               disabled={!canZoomOut}
-              onClick={() =>
-                setVisibleCount((v) => zoomVisibleCount(v, points.length, "out"))
-              }
+              onClick={() => setVisibleCount((v) => zoomVisibleCount(v, points.length, "out"))}
               className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-40"
             >
               <Minus className="h-4 w-4" />
@@ -491,9 +501,7 @@ export function PriceChartDialog({
               aria-label="Phóng to: xem ít nến hơn"
               title="Phóng to: xem ít nến hơn"
               disabled={!canZoomIn}
-              onClick={() =>
-                setVisibleCount((v) => zoomVisibleCount(v, points.length, "in"))
-              }
+              onClick={() => setVisibleCount((v) => zoomVisibleCount(v, points.length, "in"))}
               className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-40"
             >
               <Plus className="h-4 w-4" />
@@ -529,14 +537,27 @@ export function PriceChartDialog({
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={up ? "var(--gain)" : "var(--loss)"} stopOpacity="0.35" />
-                  <stop offset="100%" stopColor={up ? "var(--gain)" : "var(--loss)"} stopOpacity="0" />
+                  <stop
+                    offset="0%"
+                    stopColor={up ? "var(--gain)" : "var(--loss)"}
+                    stopOpacity="0.35"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={up ? "var(--gain)" : "var(--loss)"}
+                    stopOpacity="0"
+                  />
                 </linearGradient>
                 <clipPath id={clipPlotId}>
                   <rect x={PAD} y={PAD} width={W - PAD * 2 - LABEL_W} height={PLOT_H} />
                 </clipPath>
                 <clipPath id={clipTimeId}>
-                  <rect x={PAD} y={PLOT_BOTTOM} width={W - PAD * 2 - LABEL_W} height={TIME_LABEL_H} />
+                  <rect
+                    x={PAD}
+                    y={PLOT_BOTTOM}
+                    width={W - PAD * 2 - LABEL_W}
+                    height={TIME_LABEL_H}
+                  />
                 </clipPath>
               </defs>
               {chart.ticks.map((t) => (
@@ -606,8 +627,19 @@ export function PriceChartDialog({
                       strokeLinejoin="round"
                       strokeLinecap="round"
                     />
-                    <circle cx={chart.lastX} cy={chart.lastY} r="4" fill={up ? "var(--gain)" : "var(--loss)"} />
-                    <circle cx={chart.lastX} cy={chart.lastY} r="8" fill={up ? "var(--gain)" : "var(--loss)"} opacity="0.25" />
+                    <circle
+                      cx={chart.lastX}
+                      cy={chart.lastY}
+                      r="4"
+                      fill={up ? "var(--gain)" : "var(--loss)"}
+                    />
+                    <circle
+                      cx={chart.lastX}
+                      cy={chart.lastY}
+                      r="8"
+                      fill={up ? "var(--gain)" : "var(--loss)"}
+                      opacity="0.25"
+                    />
                   </>
                 )}
               </g>
@@ -713,7 +745,9 @@ export function PriceChartDialog({
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Cao nhất
             </div>
-            <div className="num mt-0.5 text-sm font-semibold">{high != null ? show(high) : "—"}</div>
+            <div className="num mt-0.5 text-sm font-semibold">
+              {high != null ? show(high) : "—"}
+            </div>
           </div>
           <div className="rounded-lg bg-surface-raised px-2 py-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

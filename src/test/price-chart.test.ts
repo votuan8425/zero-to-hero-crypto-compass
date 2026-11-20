@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { candleIsUp, clampPan, formatChartTime, formatSelectedTime, zoomVisibleCount } from "@/components/app/price-chart-dialog";
-import { bucketPricesToCandles } from "@/lib/prices.functions";
+import {
+  candleIsUp,
+  clampPan,
+  formatChartTime,
+  formatSelectedTime,
+  zoomVisibleCount,
+} from "@/components/app/price-chart-dialog";
+import { bucketPricesToCandles, metalRowsToCandles } from "@/lib/prices.functions";
 import { fetchCandlesFromBrowser } from "@/lib/market-client";
 
 describe("candleIsUp (nến xanh/đỏ)", () => {
@@ -104,6 +110,38 @@ describe("fetchCandlesFromBrowser (dự phòng khi server không lấy được 
     const res = await fetchCandlesFromBrowser("XXX", "1D");
     expect(res.points).toEqual([]);
     expect(res.error).toBe("Coin không hỗ trợ.");
+  });
+});
+
+describe("metalRowsToCandles (nến từ lịch sử giá SJC / Ancarat)", () => {
+  // 2 mốc/ngày (06:00, 22:00): giá mua vào SJC tăng dần 13,20 → 13,32 Tr đ/chỉ.
+  const rows = [
+    { slotAt: "2026-11-18T06:00:00+07:00", bidVnd: 13_200_000, askVnd: 13_500_000 },
+    { slotAt: "2026-11-18T22:00:00+07:00", bidVnd: 13_250_000, askVnd: 13_550_000 },
+    { slotAt: "2026-11-19T06:00:00+07:00", bidVnd: 13_280_000, askVnd: 13_580_000 },
+    { slotAt: "2026-11-19T22:00:00+07:00", bidVnd: 13_320_000, askVnd: 13_620_000 },
+  ];
+
+  it("1M: gom mốc thành nến ngày (mở = mốc đầu, đóng = mốc cuối trong ngày UTC)", () => {
+    const out = metalRowsToCandles(rows, "1M");
+    // Mốc 06:00 VN = 23:00 UTC hôm trước nên rơi sang ngày UTC trước:
+    // 17/11: [13,20], 18/11: [13,25 → 13,28], 19/11: [13,32].
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({ o: 13_200_000, h: 13_200_000, l: 13_200_000, c: 13_200_000 });
+    expect(out[1]).toMatchObject({ o: 13_250_000, h: 13_280_000, l: 13_250_000, c: 13_280_000 });
+    expect(out[2]).toMatchObject({ o: 13_320_000, h: 13_320_000, l: 13_320_000, c: 13_320_000 });
+  });
+
+  it("1D: mỗi mốc một nến riêng, giá = giá mua vào SJC (không phải giá thế giới)", () => {
+    const out = metalRowsToCandles(rows, "1D");
+    expect(out).toHaveLength(4);
+    expect(out.map((p) => p.c)).toEqual([13_200_000, 13_250_000, 13_280_000, 13_320_000]);
+    // Nến cuối khớp đúng giá Mua vào SJC hiện tại, không phải ~11 Tr đ thế giới.
+    expect(out[3]?.c).toBe(13_320_000);
+  });
+
+  it("rỗng thì rỗng (dialog hiện 'chưa đủ lịch sử' thay vì vẽ giá thế giới)", () => {
+    expect(metalRowsToCandles([], "1M")).toEqual([]);
   });
 });
 

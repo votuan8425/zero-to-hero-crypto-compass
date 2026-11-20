@@ -110,9 +110,7 @@ export const getPrices = createServerFn({ method: "GET" }).handler(
     // tickers SPOT của OKX — đã kiểm chứng) từ CoinGecko; OKX vẫn là nguồn
     // chính cho các coin đã có giá. Bạc (KAG) không dùng simple/price được
     // Vàng/bạc không lấy ở đây mà theo giá trong nước bên dưới.
-    const missing = COINS.filter(
-      (c) => c.symbol !== "USDT" && !c.unit && !usd[c.symbol],
-    );
+    const missing = COINS.filter((c) => c.symbol !== "USDT" && !c.unit && !usd[c.symbol]);
     if (missing.length > 0) {
       try {
         const g = await geckoPrices();
@@ -222,10 +220,7 @@ export function bucketPricesToCandles(
 
 /** OKX candlesticks (public, no key). Rows are newest-first: [ts, o, h, l, c, ...].
  *  Nạp gấp 3 lần số nến hiển thị để kéo thả (pan) xem được nến cũ hơn. */
-async function okxCandles(
-  symbol: string,
-  range: ChartRange,
-): Promise<CandlePoint[] | null> {
+async function okxCandles(symbol: string, range: ChartRange): Promise<CandlePoint[] | null> {
   const bar = range === "1D" ? "1H" : range === "1M" ? "1D" : "1W";
   const limit = CHART_VISIBLE_COUNT[range] * 3;
   const j = await fetchJson<{ code?: string; data?: string[][] }>(
@@ -257,10 +252,7 @@ async function okxCandles(
 }
 
 /** CoinGecko market chart (public, no key); used for silver (no OKX pair) and as fallback. */
-async function geckoCandles(
-  geckoId: string,
-  range: ChartRange,
-): Promise<CandlePoint[] | null> {
+async function geckoCandles(geckoId: string, range: ChartRange): Promise<CandlePoint[] | null> {
   // Nạp gấp 3 lần để kéo thả: 1D→3 ngày, 1M→90 ngày, 1Y→365 ngày (giới hạn free API
   // nên khung Năm qua CoinGecko chỉ đủ 1 cửa sổ, không kéo được xa).
   const days = range === "1D" ? 3 : range === "1M" ? 90 : 365;
@@ -271,8 +263,7 @@ async function geckoCandles(
   if (rows.length === 0) return null;
   // CoinGecko chỉ trả chuỗi giá (không có OHLC) nên gom theo khung giờ
   // trùng với khung nến OKX (1D→1 giờ, 1M→1 ngày, 1Y→1 tuần).
-  const bucketMs =
-    range === "1D" ? 3_600_000 : range === "1M" ? 86_400_000 : 604_800_000;
+  const bucketMs = range === "1D" ? 3_600_000 : range === "1M" ? 86_400_000 : 604_800_000;
   const pts = bucketPricesToCandles(
     rows.map(([t, c]) => ({ t, c })),
     bucketMs,
@@ -311,6 +302,64 @@ export const getCandles = createServerFn({ method: "GET" })
       }
     }
     if (!points || points.length < 2) {
+      return { symbol, range, points: [], changePct: null, error: CHART_ERR };
+    }
+    const first = points[0]?.c ?? 0;
+    const last = points[points.length - 1]?.c ?? 0;
+    const changePct = first > 0 ? ((last - first) / first) * 100 : null;
+    return { symbol, range, points, changePct, error: null };
+  });
+
+/** Một mốc giá trong nước (SJC / Ancarat) đã lưu trong bảng metal_prices. */
+export interface MetalHistoryRow {
+  slotAt: string;
+  bidVnd: number;
+  askVnd: number;
+}
+
+/**
+ * Gom lịch sử giá mua vào (bid) trong nước thành nến OHLC theo khung.
+ * Giá trong nước chỉ cập nhật 2 lần/ngày nên: 1D→mỗi mốc một nến (1 giờ),
+ * 1M→mỗi ngày một nến, 1Y→mỗi tuần một nến. Dùng giá mua vào vì đó là giá
+ * app định giá tài sản đang giữ (khớp khung "Mua vào" phía trên).
+ */
+export function metalRowsToCandles(rows: MetalHistoryRow[], range: ChartRange): CandlePoint[] {
+  const bucketMs = range === "1D" ? 3_600_000 : range === "1M" ? 86_400_000 : 604_800_000;
+  return bucketPricesToCandles(
+    rows.map((r) => ({ t: new Date(r.slotAt).getTime(), c: Number(r.bidVnd) })),
+    bucketMs,
+  );
+}
+
+/**
+ * Lịch sử giá vàng/bạc TRONG NƯỚC (SJC / Ancarat) cho biểu đồ — thay cho
+ * giá thế giới. Trước đây dialog dùng nến thế giới quy đổi (metalChartFactor)
+ * nên giá chart (~11 Tr đ/chỉ) lệch xa giá SJC (~13,3 Tr đ/chỉ) ở khung trên.
+ */
+export const getMetalHistory = createServerFn({ method: "GET" })
+  .inputValidator((input: { symbol?: unknown; range?: unknown }) => {
+    const symbol = typeof input?.symbol === "string" ? input.symbol.toUpperCase() : "";
+    const range: ChartRange = input?.range === "1M" || input?.range === "1Y" ? input.range : "1D";
+    if (symbol !== GOLD_SYMBOL && symbol !== SILVER_SYMBOL) {
+      throw new Error("Chỉ dùng cho vàng/bạc.");
+    }
+    return { symbol, range };
+  })
+  .handler(async ({ data }): Promise<CandlesResult> => {
+    const { symbol, range } = data;
+    // Nạp gấp 3 lần số nến hiển thị để kéo thả được như getCandles.
+    const days = range === "1D" ? 3 : range === "1M" ? 90 : 365;
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    let rows: MetalHistoryRow[] = [];
+    try {
+      const m = await import("./metal-prices.server");
+      rows = await m.getMetalHistoryRows(symbol, since);
+    } catch (e) {
+      console.error("metal history failed", e);
+      return { symbol, range, points: [], changePct: null, error: CHART_ERR };
+    }
+    const points = metalRowsToCandles(rows, range);
+    if (points.length < 2) {
       return { symbol, range, points: [], changePct: null, error: CHART_ERR };
     }
     const first = points[0]?.c ?? 0;
