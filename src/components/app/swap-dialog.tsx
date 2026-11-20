@@ -60,6 +60,7 @@ export function SwapDialog({
   const usdVnd = prices.data?.usdVnd ?? null;
 
   const heldSymbols = useMemo(() => holdings.filter((h) => h.quantity > 0), [holdings]);
+  const [from, setFrom] = useState(defaultFrom ?? heldSymbols[0]?.symbol ?? "BTC");
   // Ngày mua đầu tiên của token nguồn — ngày đổi không được trước ngày này,
   // nếu không lệnh bán chạy trước lần mua, avg cost và vốn tính sai lặng.
   const firstBuyDate = useMemo(() => {
@@ -69,7 +70,6 @@ export function SwapDialog({
       .sort();
     return dates[0] ?? null;
   }, [txs, from]);
-  const [from, setFrom] = useState(defaultFrom ?? heldSymbols[0]?.symbol ?? "BTC");
   const [amount, setAmount] = useState("");
   const [to, setTo] = useState("USDT");
   /** Đơn vị nhận khi đích là vàng (bạc luôn theo lượng). */

@@ -208,6 +208,7 @@ describe("chốt điểm cuối bằng giá trị hiện tại", () => {
     startValue: 100,
     endValue: 120,
     deposits: 0,
+    withdrawals: 0,
     pnl: 20,
     pnlPct: 20,
     fromMs: t0,
