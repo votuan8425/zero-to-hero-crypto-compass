@@ -52,8 +52,8 @@ export function RecentActivities({ userId }: { userId: string }) {
                 <td className="num whitespace-nowrap px-3 py-2.5 text-muted-foreground">
                   {formatShortTime(a.created_at)}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 font-medium">{activityLabel(a)}</td>
-                <td className="px-3 py-2.5">{activityDetail(a)}</td>
+                <td className="px-3 py-2.5 font-medium">{activityLabel(a)}</td>
+                <td className="min-w-[8.5rem] px-3 py-2.5">{activityDetail(a)}</td>
               </tr>
             ))}
           </tbody>

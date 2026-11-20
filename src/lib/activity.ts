@@ -91,7 +91,8 @@ export async function logActivity(input: LogActivityInput): Promise<void> {
       symbol: input.symbol ?? null,
       to_symbol: input.toSymbol ?? null,
       pct: input.pct ?? null,
-      meta: input.meta ?? null,
+      // Cột meta bắt buộc (mặc định {}), gửi null sẽ bị database từ chối.
+      meta: input.meta ?? {},
     });
     if (error) console.warn("[activity] log failed", error.message);
   } catch (err) {
@@ -109,7 +110,7 @@ export async function fetchRecentActivities(userId: string, limit = 3): Promise<
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) return [];
-    return (data ?? []) as Activity[];
+    return (data ?? []) as unknown as Activity[];
   } catch {
     return [];
   }
