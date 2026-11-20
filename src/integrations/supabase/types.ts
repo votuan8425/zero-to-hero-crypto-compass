@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_activities: {
+        Row: {
+          created_at: string
+          id: string
+          meta: Json
+          pct: number | null
+          symbol: string | null
+          to_symbol: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          pct?: number | null
+          symbol?: string | null
+          to_symbol?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          pct?: number | null
+          symbol?: string | null
+          to_symbol?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       admin_allocations: {
         Row: {
           created_at: string

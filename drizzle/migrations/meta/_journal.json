@@ -64,6 +64,13 @@
       "when": 1795058528258,
       "tag": "0008_admin_list_users_tx_count",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795136344833,
+      "tag": "0009_admin_activities",
+      "breakpoints": true
     }
   ]
 }

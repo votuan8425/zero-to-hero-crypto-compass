@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { displaySymbol } from "./coins";
 import { formatPercent } from "./format";
@@ -8,10 +7,6 @@ import { formatPercent } from "./format";
  * KHÔNG lưu số lượng, số tiền hay giá mua — nên người theo dõi đã duyệt
  * mới xem được mà không lộ thông tin riêng tư.
  */
-
-// Bảng admin_activities chưa có trong database (chưa có migration) nên kiểu
-// sinh tự động không biết tới nó; dùng client không gắn kiểu cho riêng bảng này.
-const db = supabase as unknown as SupabaseClient;
 
 export type ActivityType = "buy" | "sell" | "swap" | "update" | "message";
 
@@ -90,13 +85,14 @@ export interface LogActivityInput {
  */
 export async function logActivity(input: LogActivityInput): Promise<void> {
   try {
-    const { error } = await db.from("admin_activities").insert({
+    const { error } = await supabase.from("admin_activities").insert({
       user_id: input.userId,
       type: input.type,
       symbol: input.symbol ?? null,
       to_symbol: input.toSymbol ?? null,
       pct: input.pct ?? null,
-      meta: input.meta ?? null,
+      // Cột meta bắt buộc (mặc định {}), gửi null sẽ bị database từ chối.
+      meta: input.meta ?? {},
     });
     if (error) console.warn("[activity] log failed", error.message);
   } catch (err) {
@@ -107,14 +103,14 @@ export async function logActivity(input: LogActivityInput): Promise<void> {
 /** Đọc N hành động gần nhất của một investor (mặc định 3). Lỗi thì trả rỗng. */
 export async function fetchRecentActivities(userId: string, limit = 3): Promise<Activity[]> {
   try {
-    const { data, error } = await db
+    const { data, error } = await supabase
       .from("admin_activities")
       .select("id,user_id,type,symbol,to_symbol,pct,meta,created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) return [];
-    return (data ?? []) as Activity[];
+    return (data ?? []) as unknown as Activity[];
   } catch {
     return [];
   }
