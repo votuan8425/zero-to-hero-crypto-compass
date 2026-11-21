@@ -115,6 +115,13 @@ export function computeHoldings(txs: Tx[], prices: PriceMap = {}): Holding[] {
     }
     map.set(symbol, h);
   }
+  // Làm tròn số lượng về 8 chữ số thập phân sau khi cộng dồn — tránh số lẻ
+  // dài do cộng dồn số thực (vd 0,1 + 0,1 + 0,1 = 0,30000000000000004 thay
+  // vì 0,3). Nút "Tối đa" ở Swap và các chỗ nhập số lượng dùng quantity này;
+  // làm tròn ở đây thì đổi 100% cũng hết sạch (không còn bụi 4e-17).
+  for (const h of map.values()) {
+    h.quantity = Math.round(h.quantity * 1e8) / 1e8;
+  }
   const out = [...map.values()].map((h) => {
     const q = prices[h.symbol];
     const avgCostUsd = h.quantity > 0 ? h.investedUsd / h.quantity : 0;

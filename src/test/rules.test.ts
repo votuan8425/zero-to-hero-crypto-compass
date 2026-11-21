@@ -53,6 +53,27 @@ describe("portfolio math", () => {
     expect(totals.pnlUsd).toBe(100);
     expect(totals.pnlPct).toBe(50);
   });
+
+  it("làm tròn số lượng về 8 chữ số thập phân (0,1×3 = 0,3, không phải 0,30000000000000004)", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 0.1, price_usd: 100 }),
+      tx({ quantity: 0.1, price_usd: 100 }),
+      tx({ quantity: 0.1, price_usd: 100 }),
+    ]);
+    // Không làm tròn thì JS cộng dồn ra 0.30000000000000004 — nút "Tối đa"
+    // ở Swap sẽ hiện số lẻ dài đó và gây nhầm lẫn.
+    expect(btc?.quantity).toBe(0.3);
+  });
+
+  it("đổi 100% sau khi làm tròn thì hết sạch, không còn bụi 4e-17", () => {
+    const [btc] = computeHoldings([
+      tx({ quantity: 0.1, price_usd: 100 }),
+      tx({ quantity: 0.1, price_usd: 100 }),
+      tx({ quantity: 0.1, price_usd: 100 }),
+      tx({ quantity: -0.3, price_usd: 150, tx_date: "2026-11-11" }),
+    ]);
+    expect(btc?.quantity).toBe(0);
+  });
 });
 
 describe("bán / swap giữ đúng giá mua trung bình (avg cost)", () => {
