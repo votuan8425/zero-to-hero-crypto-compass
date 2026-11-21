@@ -71,6 +71,13 @@
       "when": 1795136344833,
       "tag": "0009_admin_activities",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795236022423,
+      "tag": "0010_allow_sell_transactions",
+      "breakpoints": true
     }
   ]
 }
