@@ -81,9 +81,7 @@ export function selectPublishedAllocation(
   followedId: string | null,
 ): AdminAllocation | null {
   if (investors.length === 0) return null;
-  const followed = followedId
-    ? investors.find((a) => a.user_id === followedId)
-    : undefined;
+  const followed = followedId ? investors.find((a) => a.user_id === followedId) : undefined;
   return followed ?? investors[0] ?? null;
 }
 
@@ -104,9 +102,7 @@ export function buildAdminAllocationSlices(
       name: s.name,
       percent: Math.round(s.percent * 100) / 100,
       pnlPct:
-        s.pnlPct != null && Number.isFinite(s.pnlPct)
-          ? Math.round(s.pnlPct * 100) / 100
-          : null,
+        s.pnlPct != null && Number.isFinite(s.pnlPct) ? Math.round(s.pnlPct * 100) / 100 : null,
     }))
     .filter((s) => s.symbol && Number.isFinite(s.percent) && s.percent > 0)
     .sort((a, b) => b.percent - a.percent);
@@ -153,20 +149,36 @@ export function messageChanged(
 }
 
 /**
- * True khi hàng đã đăng là hàng CŨ (đăng trước khi có lãi/lỗ từng token):
- * có slices nhưng TẤT CẢ đều chưa có pnlPct, trong khi danh mục hiện tại
- * của admin ĐÃ có lãi/lỗ từng token để ghi. Dùng để backfill 1 lần cho
- * hàng cũ — KHÁC với auto-sync đã gỡ (nó chạy mỗi lần vào trang và báo
- * follower dù không có gì mới). Sau khi backfill ghi xong, hàng đã có
- * pnlPct nên hàm này trả false và không bao giờ chạy lại.
+ * Chỉ đổi lời nhắn của nhà đầu tư, KHÔNG động vào slices / stats.
+ * Trước đây lưu lời nhắn gọi syncAdminAllocation nên cũng ghi lại danh
+ * mục từ giá live lúc đó — giá token trôi làm slices lệch qua ngưỡng
+ * 0,01 nên trigger báo "đã cập nhật danh mục" dù admin chỉ đổi lời nhắn.
+ * Giờ chỉ đổi message: trigger chỉ báo "đã cập nhật lời nhắn".
+ * Trả "skipped" khi admin chưa đăng portfolio (chưa có hàng để gắn lời nhắn).
  */
-export function needsPnlBackfill(
-  published: AdminAllocation | null | undefined,
-  current: readonly AllocationSlice[],
-): boolean {
-  if (!published || published.slices.length === 0) return false;
-  if (!published.slices.every((s) => s.pnlPct == null)) return false;
-  return current.some((s) => s.pnlPct != null && Number.isFinite(s.pnlPct));
+export async function saveAdminMessage(
+  user: User,
+  message: string,
+): Promise<"synced" | "unchanged" | "skipped"> {
+  if (!isAdminUser(user)) return "skipped";
+  const existing = await fetchAdminAllocation();
+  if (!existing || existing.user_id !== user.id) return "skipped";
+  const trimmed = message.trim();
+  const next = trimmed ? trimmed : null;
+  if (!messageChanged(existing.message, next)) return "unchanged";
+  const { error } = await supabase
+    .from("admin_allocations")
+    .update({ message: next, message_updated_at: new Date().toISOString() })
+    .eq("user_id", user.id);
+  if (error) {
+    if (isMissingMessageColumn(error)) {
+      throw new Error(
+        "Chưa chạy migration 0005 — hãy chạy drizzle/migrations/0005_admin_message.sql trong Supabase SQL editor rồi lưu lại.",
+      );
+    }
+    throw error;
+  }
+  return "synced";
 }
 
 type AdminAllocationRow = {
@@ -180,8 +192,7 @@ type AdminAllocationRow = {
 };
 
 function parseRow(row: AdminAllocationRow): AdminAllocation {
-  const pnl =
-    row.pnl_pct == null || row.pnl_pct === "" ? null : Number(row.pnl_pct);
+  const pnl = row.pnl_pct == null || row.pnl_pct === "" ? null : Number(row.pnl_pct);
   const message = (row.message ?? "").trim();
   return {
     user_id: row.user_id,

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   BookMarked,
@@ -44,8 +44,8 @@ import { earliestTxDate, formatDurationSince } from "@/lib/accumulation";
 import { isAdminUser } from "@/lib/admin";
 import {
   fetchPublishedAllocations,
-  needsPnlBackfill,
   publishedAllocationsKey,
+  saveAdminMessage,
   syncAdminAllocation,
   type AdminAllocation,
 } from "@/lib/admin-allocation";
@@ -333,8 +333,8 @@ function AdminMessageDialog({
         <DialogHeader>
           <DialogTitle>Lời nhắn của nhà đầu tư</DialogTitle>
           <DialogDescription>
-            Lời nhắn hiển thị cùng danh mục đã đăng trên tab Tham khảo cho mọi người dùng. Lưu lời
-            nhắn cũng đăng lại danh mục hiện tại của bạn.
+            Lời nhắn hiển thị cùng danh mục đã đăng trên tab Tham khảo cho mọi người dùng. Chỉ đổi
+            lời nhắn — không đăng lại danh mục (bấm “Cập nhật portfolio” mới cập nhật danh mục).
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -481,12 +481,15 @@ function ReferencesPage() {
   const [messageDialogOpen, setMessageDialogOpen] = useState(false);
   const [savingMessage, setSavingMessage] = useState(false);
 
-  // Lưu lời nhắn của nhà đầu tư kèm danh mục hiện tại (đăng lại portfolio).
+  // Lưu lời nhắn của nhà đầu tư — CHỈ đổi lời nhắn, không ghi lại danh mục.
+  // (Trước đây lưu lời nhắn cũng gọi syncAdminAllocation nên ghi lại slices
+  // từ giá live lúc đó; giá trôi làm slices lệch nên trigger báo "đã cập
+  // nhật danh mục" dù admin chỉ đổi lời nhắn. Giờ tách riêng rồi.)
   async function saveMessage(message: string) {
     if (savingMessage) return;
     setSavingMessage(true);
     try {
-      const res = await syncAdminAllocation(user, allocation, adminStats, message);
+      const res = await saveAdminMessage(user, message);
       if (res === "skipped") {
         toast.error("Bạn chưa có giao dịch nào để đăng kèm lời nhắn.");
         return;
@@ -549,27 +552,15 @@ function ReferencesPage() {
   // Danh mục đã đăng của chính admin (để hiện "đã đăng lúc ..." trong banner).
   const ownPublished = admin ? (investors.find((a) => a.user_id === user.id) ?? null) : null;
 
-  // Backfill 1 LẦN cho hàng đã đăng từ trước khi có lãi/lỗ từng token:
-  // hàng cũ có slices nhưng chưa có pnlPct nào, trong khi danh mục hiện
-  // tại của admin đã có. Ghi 1 lần rồi thôi (sau đó hàng đã có pnlPct
-  // nên không chạy lại). KHÁC với auto-sync đã gỡ: chỉ chạy khi hàng còn
-  // thiếu pnlPct, không chạy mỗi lần vào trang. Lỗi thì bỏ qua — admin
-  // vẫn bấm "Cập nhật portfolio" để ghi tay được.
-  const backfilledRef = useRef(false);
-  useEffect(() => {
-    if (!admin || backfilledRef.current) return;
-    if (!needsPnlBackfill(ownPublished, allocation.slices)) return;
-    backfilledRef.current = true;
-    void (async () => {
-      try {
-        await syncAdminAllocation(user, allocation, adminStats);
-        await qc.invalidateQueries({ queryKey: publishedAllocationsKey });
-      } catch {
-        // Bỏ qua — lần mở trang sau sẽ thử lại (ref chỉ chặn trong 1 lần mở).
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admin, ownPublished, allocation]);
+  // KHÔNG còn backfill tự ghi khi chỉ xem: trước đây có một useEffect tự
+  // gọi syncAdminAllocation để điền pnlPct cho hàng cũ thiếu lãi/lỗ từng
+  // token. Nó ghi đè hàng đã đăng bằng tỷ lệ % / lãi/lỗ tính từ giá live
+  // lúc đó — giá token thay đổi làm tỷ lệ trôi qua ngưỡng 0,01 nên trigger
+  // báo cho mọi follower, dù admin chỉ mở app xem chứ không bấm gì.
+  // Đã gỡ hẳn: hàng cũ thiếu pnlPct thì cột Lãi/Lỗ hiện "—" cho tới khi
+  // admin bấm "Cập nhật portfolio" một lần (lúc đó mới ghi + mới báo).
+  // Chỉ 2 hành động chủ động của admin mới ghi vào admin_allocations:
+  // bấm "Cập nhật portfolio" (deployPortfolio) và lưu lời nhắn (saveMessage).
 
   return (
     <div>
