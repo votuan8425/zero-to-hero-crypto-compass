@@ -27,7 +27,7 @@ import { formatMoney, formatNumber, todayKey } from "@/lib/format";
 import { metalAskPerUnit, normalizeMetalPurchase } from "@/lib/metals";
 import type { Holding, Tx } from "@/lib/portfolio";
 import { actionPercent, roundActionPercent, swapRate } from "@/lib/swap";
-import { logActivity } from "@/lib/activity";
+import { logActivity, swapActivityType } from "@/lib/activity";
 import { usePrices } from "@/hooks/use-app-data";
 import { useUser } from "@/hooks/use-user";
 import { CoinLogo } from "./coin-logo";
@@ -247,9 +247,11 @@ export function SwapDialog({
         tx_date: date,
         note: finalNote,
       });
+      // Đổi sang USDT thực chất là bán (rút về stablecoin) nên ghi loại
+      // "sell" (hiện "Bán"), đổi sang token khác mới ghi "swap" ("Đổi").
       await logActivity({
         userId: user.id,
-        type: "swap",
+        type: swapActivityType(to),
         symbol: from,
         toSymbol: to,
         pct: pctRounded,

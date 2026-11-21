@@ -6,7 +6,13 @@ import {
   roundActionPercent,
   swapRate,
 } from "@/lib/swap";
-import { activityDetail, activityLabel, allocationSummary, type Activity } from "@/lib/activity";
+import {
+  activityDetail,
+  activityLabel,
+  allocationSummary,
+  swapActivityType,
+  type Activity,
+} from "@/lib/activity";
 
 const act = (p: Partial<Activity>): Activity => ({
   id: "a1",
@@ -81,9 +87,16 @@ describe("câu mô tả hành động: ngắn gọn, chỉ % và tên token", ()
   });
 
   it("bán 100% BTC sang USDT", () => {
+    expect(activityLabel(act({ type: "sell", pct: 100, to_symbol: "USDT" }))).toBe("Bán");
     expect(activityDetail(act({ type: "sell", pct: 100, to_symbol: "USDT" }))).toBe(
       "100% BTC sang USDT",
     );
+  });
+
+  it("đổi sang USDT là bán, đổi sang token khác mới là đổi", () => {
+    expect(swapActivityType("USDT")).toBe("sell");
+    expect(swapActivityType("ETH")).toBe("swap");
+    expect(swapActivityType("BTC")).toBe("swap");
   });
 
   it("đổi một phần 50% BTC sang ETH", () => {

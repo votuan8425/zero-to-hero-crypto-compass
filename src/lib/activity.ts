@@ -42,6 +42,17 @@ export function activityLabel(a: Pick<Activity, "type" | "pct">): string {
 }
 
 /**
+ * Loại hành động khi đổi token: đổi sang USDT thực chất là BÁN (rút về
+ * stablecoin) nên ghi "Bán", đổi sang token khác mới ghi "Đổi". Đúng spec
+ * 22:31 19/11: "bán sang USDT → Bán 100% BTC sang USDT", "đổi → Đổi 100%
+ * BTC sang ETH". Trước đây Swap ghi hết là "swap" nên đổi sang USDT cũng
+ * hiện "Đổi" thay vì "Bán".
+ */
+export function swapActivityType(toSymbol: string): "sell" | "swap" {
+  return toSymbol === "USDT" ? "sell" : "swap";
+}
+
+/**
  * Câu mô tả ngắn gọn cho cột "Chi tiết" — chỉ % và tên token, không số
  * lượng hay số tiền. Ví dụ: "50% BTC", "100% BTC sang ETH",
  * "100% BTC sang USDT", "ETH 81% · BTC 19%".
